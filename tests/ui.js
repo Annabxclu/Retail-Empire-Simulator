@@ -13,7 +13,7 @@ const { chromium } = require('playwright');
   await pg.waitForTimeout(300);
   const has = await pg.$('[data-a=serveNext]:not([disabled])');
   if (has) { await has.click(); await pg.waitForTimeout(200);
-    const cashBtn = await pg.$('[data-a=payM][data-k=card]'); await cashBtn.click(); await pg.click('#modal [data-a=pay]'); await pg.waitForTimeout(200); }
+    const ci = await pg.$('#cashIn'); if (ci) await pg.click('[data-a=cashQuick] >> nth=-1'); await pg.click('#modal [data-a=pay]'); await pg.waitForTimeout(200); }
   else errs.push('no queue to serve');
   // order
   await pg.evaluate(() => window.__RE_UI.A.nav({ v: 'suppliers' }));
@@ -33,7 +33,7 @@ const { chromium } = require('playwright');
   await pg.screenshot({ path: '' + __dirname + '/hq.png', fullPage: false });
   await pg.evaluate(() => window.__RE_UI.A.nav({ v: 'finance' })); await pg.screenshot({ path: '' + __dirname + '/fin.png' });
   await pg.evaluate(() => { window.__RE_UI.UI.bid = 'b1'; window.__RE_UI.A.nav({ v: 'checkout' }); });
-  const s2 = await pg.$('[data-a=serveNext]:not([disabled])'); if (s2) { await s2.click(); const cash = await pg.$('[data-a=payM][data-k=cash]'); await cash.click(); await pg.screenshot({ path: '' + __dirname + '/serve.png' }); await pg.keyboard.press('Escape'); }
+  const s2 = await pg.$('[data-a=serveNext]:not([disabled])'); if (s2) { await s2.click(); await pg.screenshot({ path: '' + __dirname + '/serve.png' }); await pg.keyboard.press('Escape'); }
   const audit = await pg.evaluate(() => RE.audit(window.__RE_UI.S));
   const m = await br.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   m.on('pageerror', e => errs.push('MOB ' + e.message));

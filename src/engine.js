@@ -469,7 +469,8 @@ function arrivalRate(S, b) { // per hour
 }
 
 function startVisit(S, b, c, kind, data) {
-  c.visit = { phase: 'browsing', start: S.t, until: S.t + randi(4, 10), kind: kind || 'shop', basket: [], missed: 0, pricey: 0, alt: 0, pre: 0, data: data || null };
+  const usual = c.pay || 'card', other = usual === 'card' ? 'cash' : 'card';
+  c.visit = { method: Math.random() < 0.8 ? usual : other, phase: 'browsing', start: S.t, until: S.t + randi(4, 10), kind: kind || 'shop', basket: [], missed: 0, pricey: 0, alt: 0, pre: 0, data: data || null };
   if (kind === 'return') { c.visit.phase = 'queue'; c.visit.queueSince = S.t; b.queue.push(c.id); }
   b.active.push(c.id);
   st(S, dayOf(S.t), b.id).visits++;
@@ -655,7 +656,7 @@ function completeSale(S, bid, cid, o = {}) {
     return { ok: true, refund: amt };
   }
   const tot = basketTotal(S, b, v, o.wrap);
-  let method = o.method || c.pay;
+  const method = payMethod(c);
   if (method === 'cash') {
     const given = o.given != null ? o.given : (v.tender || tot.total);
     if (given < tot.total) return { ok: false, err: 'Cash received is less than the total.' };
@@ -685,13 +686,14 @@ function completeSale(S, bid, cid, o = {}) {
   endVisit(S, b, c, 'paid');
   return { ok: true, total: tot.total, change: o.change || 0 };
 }
+function payMethod(c) { return (c.visit && c.visit.method) || c.pay || 'card'; }
 function itemName(b, it) { if (!it) return 'item'; const p = prodOf(b, it); return p.name + (it.label ? ` (${it.label})` : ''); }
 
 function serveStart(S, bid, cid) {
   const b = branchOf(S, bid), c = b && b.cust[cid];
   if (!c || !c.visit || c.visit.phase !== 'queue') return { ok: false, err: 'That customer is already being served or has left.' };
   c.visit.phase = 'register'; c.visit.by = 'you';
-  if (c.visit.kind !== 'return' && c.visit.tender == null) c.visit.tender = tenderFor(basketTotal(S, b, c.visit, true).total, c.pay);
+  if (c.visit.kind !== 'return' && c.visit.tender == null) c.visit.tender = tenderFor(basketTotal(S, b, c.visit, true).total, payMethod(c));
   return { ok: true };
 }
 function serveCancel(S, bid, cid) {
@@ -1159,7 +1161,7 @@ function audit(S) {
 
 G.RE = { C, DAY, OPEN, CLOSE, SHUT, LAST_ENTRY, MON, DOW, LOCS, SIZES, TYPES, SUPPLIERS, ROLES, CAMPAIGNS, BRAND_CAMPAIGN, LOYALTY_COST, GOALS, FMT_LABEL,
   dayOf, dateOf, fmtDate, fmtTime, newGame, step, skipNight, isNight, facings, facingsUsed, stockCap, stockUsed, itShelf, itStock, prodOf, shelfMaxOf, refPrice, costOf, avgCost, effPrice, saleOn,
-  arrivalRate, seasonMult, typeLabel, custType, basketTotal, completeSale, serveStart, serveCancel, itemName, toShelf, fillAll, setListed,
+  arrivalRate, seasonMult, typeLabel, custType, basketTotal, completeSale, payMethod, serveStart, serveCancel, itemName, toShelf, fillAll, setListed,
   supUnit, supItems, freeSpace, supCarries, supDiscount, onOrder, quoteOrder, placeOrder, acceptDelivery, refuseDelivery, deliveryIn, reorderSuggestion, signSupplier,
   buyEquip, buyUpgrade, hire, fire, runCampaign, tidy, openCost, rentOf, utilOf, maintOf, openBranch, openingStockCost, starterStock, sellBranch, sellValue, setStatus,
   sumStats, netOf, invValue, money, audit, branchOf, note, st, itemsOf, createBranch };

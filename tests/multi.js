@@ -7,7 +7,7 @@ R.hire(S,'b2',S.branches[1].apps.find(a=>a.role==='manager').id);
 R.buyEquip(S,'b3','giftwrap');
 let lastDay=1;
 for(let i=0;i<1440*30;i++){ R.step(S); const m=S.t%1440;
-  if(m%3===0) for(const b of S.branches){const id=b.queue.find(id=>b.cust[id].visit.phase==='queue'); if(id){R.serveStart(S,b.id,id); const c=b.cust[id]; const r=R.completeSale(S,b.id,id,{method:c.pay,given:c.visit.tender,wrap:true}); if(!r.ok) console.log('sale',r.err);}}
+  if(m%3===0) for(const b of S.branches){const id=b.queue.find(id=>b.cust[id].visit.phase==='queue'); if(id){R.serveStart(S,b.id,id); const c=b.cust[id]; const r=R.completeSale(S,b.id,id,{given:c.visit.tender,wrap:true}); if(!r.ok) console.log('sale',r.err);}}
   if(m%30===0) for(const b of S.branches) R.fillAll(S,b);
   if(m===400) for(const b of S.branches) for(const sid of b.sups){ const sug=R.reorderSuggestion(S,b,sid); if(sug.length){const r=R.placeOrder(S,b.id,sid,sug); if(!r.ok&&!/Minimum/.test(r.err)) console.log(b.type,r.err.slice(0,80));} }
   if(m%20===0) for(const po of S.pos) if(po.status==='arrived') R.acceptDelivery(S,po.id);
