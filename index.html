@@ -816,7 +816,7 @@ function visitSat(S, b, c, outcome) {
   const v = c.visit; let s = 84; const n = Math.max(1, v.wants || 1);
   s -= 38 * v.missed / n + 16 * v.pricey / n - 4 * v.pre;
   if (v.missed && n <= 2) s -= 8;
-  if (v.queueSince != null) { const waited = (v.doneAt || S.t) - v.queueSince; s -= Math.max(0, waited - 5) * 1.6; }
+  if (v.queueSince != null) { const waited = (v.doneAt || S.t) - v.queueSince; s -= Math.min(25, Math.max(0, waited - 5) * 0.8); }
   if (v.fitSince != null && v.fitWaited) s -= v.fitWaited * 1.2;
   if (b.clean < 65) s -= (65 - b.clean) / 2.5;
   if (outcome === 'paid' && v.missed === 0) s += 6;
@@ -1219,7 +1219,7 @@ function dayStart(S) {
     }
     if (units) { st(S, day - 1, b.id).spoil += lost; note(S, b.id, 'warn', `${units} expired units thrown out at ${b.name} (${money(lost)} at cost).`); }
     chargeDaily(S, b, day);
-    for (const e of b.emps) { if (e.on) { e.days++; e.eff = Math.min(1.5, Math.round((e.eff + 0.004) * 1000) / 1000); } e.on = Math.random() < e.rel; e.task = null; if (!e.on) note(S, b.id, 'warn', `${e.name} (${ROLES[e.role].label.toLowerCase()}) called in sick today.`); }
+    for (const e of b.emps) { if (e.on) { e.days++; e.eff = Math.min(1.5, Math.round((e.eff + 0.004) * 1000) / 1000); } releaseTask(b, e); e.on = Math.random() < e.rel; if (!e.on) note(S, b.id, 'warn', `${e.name} (${ROLES[e.role].label.toLowerCase()}) called in sick today.`); }
     refreshApplicants(S, b);
     b.camps = b.camps.filter(c => c.until > S.t);
     b.fitBusy = 0; b.clean = clamp(b.clean + 12, 0, 100);
@@ -1303,16 +1303,16 @@ function branchMinute(S, b, mod) {
       if (v.basket.length > 1 && Math.random() < 0.2) { const l = v.basket.pop(); returnPicks(S, b.items[l.sku], l.picks); }
       else if (v.basket.length === 1 && Math.random() < 0.12) { abandon(S, b, c, 'fit'); continue; }
       toQueue(S, b, c);
-    } else if (v.phase === 'queue') {
-      if (S.t - v.queueSince > c.patience) abandon(S, b, c, 'queue');
-      else if (mod >= SHUT) abandon(S, b, c, 'close');
     }
+    // customers in the checkout line wait as long as it takes; there is no time limit
   }
   // staff
-  if (mod >= OPEN - 60 && mod < SHUT + 15) {
+  const staffHours = mod >= OPEN - 60 && mod < SHUT + 15;
+  if (staffHours || b.queue.length) {
     const regs = b.equip.register || 1; let lane = 0;
     for (const e of b.emps) {
       if (!e.on) continue;
+      if (!staffHours && e.role !== 'cashier') continue;
       if (e.role === 'cashier') {
         lane++; if (lane > regs) { e.task = { idle: 'No free register' }; continue; }
         if (e.task && e.task.cid) {
@@ -1333,7 +1333,11 @@ function branchMinute(S, b, mod) {
       } else if (e.role === 'manager') e.task = { label: 'Supervising the store' };
     }
   }
-  if (mod === SHUT + 15) for (const e of b.emps) e.task = null;
+  if (mod === SHUT + 15 && !b.queue.length) for (const e of b.emps) releaseTask(b, e);
+}
+function releaseTask(b, e) {
+  if (e.task && e.task.cid) { const c = b.cust[e.task.cid]; if (c && c.visit && c.visit.phase === 'register' && c.visit.by === e.id) { c.visit.phase = 'queue'; c.visit.by = null; } }
+  e.task = null;
 }
 function checkGoals(S) {
   for (const g of GOALS) if (!S.goals[g.id] && g.test(S)) { S.goals[g.id] = dayOf(S.t); note(S, null, 'good', `Goal reached: ${g.text}.`); }
@@ -1369,6 +1373,7 @@ function audit(S) {
   for (const b of S.branches) {
     for (const it of Object.values(b.items)) for (const x of it.batches) if (x.s < 0 || x.r < 0 || !Number.isFinite(x.s) || !Number.isFinite(x.r)) issues.push(`${b.name}: negative stock on ${it.sku}`);
     for (const cid of b.queue) { const c = b.cust[cid]; if (!c || !c.visit) issues.push(`${b.name}: queue holds a customer who is not visiting`); }
+    for (const cid of b.queue) { const v = b.cust[cid] && b.cust[cid].visit; if (v && v.phase === 'register' && v.by !== 'you' && !b.emps.some(e => e.id === v.by && e.task && e.task.cid === cid)) issues.push(`${b.name}: customer stuck at a register nobody is running`); }
     if (new Set(b.queue).size !== b.queue.length) issues.push(`${b.name}: customer appears twice in queue`);
     for (const [pid, on] of Object.entries(b.listed)) if (on && !TYPES[b.type].pmap[pid]) issues.push(`${b.name}: unknown listed product`);
     const fu = facingsUsed(b), fc = facings(b); for (const k of Object.keys(fu)) if (fu[k] > fc[k]) issues.push(`${b.name}: more products listed than ${k} facings`);
@@ -1686,9 +1691,9 @@ V.checkout = () => {
   const q = b.queue.map(id => b.cust[id]).filter(c => c && c.visit);
   const waiting = q.filter(c => c.visit.phase === 'queue');
   const browsing = b.active.map(id => b.cust[id]).filter(c => c.visit && (c.visit.phase === 'browsing' || c.visit.phase === 'fitting' || c.visit.phase === 'fitwait'));
-  return header('Checkout', `Serve customers yourself, or hire cashiers to run the ${regs} register${regs > 1 ? 's' : ''} for you. Customers leave if they wait longer than their patience.`, `<button class="btn pri big" data-a="serveNext" ${waiting.length ? '' : 'disabled'}>Serve next customer</button>`) +
+  return header('Checkout', `Serve customers yourself, or hire cashiers to run the ${regs} register${regs > 1 ? 's' : ''} for you. Customers wait in line until they're served, even after closing time, though long waits make them less happy.`, `<button class="btn pri big" data-a="serveNext" ${waiting.length ? '' : 'disabled'}>Serve next customer</button>`) +
   `<div class="grid g2"><div class="card"><h2>Queue <span class="num muted">(${q.length})</span></h2>${q.length ? `<div class="stack" style="gap:8px">${q.map(c => { const v = c.visit, w = S.t - (v.queueSince || S.t); const tot = v.kind === 'return' ? null : R.basketTotal(S, b, v, true); const busy = v.phase === 'register'; const by = busy ? (v.by === 'you' ? 'You are serving' : 'Cashier ' + ((b.emps.find(e => e.id === v.by) || {}).name || '')) : '';
-     return `<div class="qcard ${busy ? 'busy' : ''}"><div><b>${esc(c.name)}</b> <span class="small muted">${esc(R.typeLabel(b, c))}</span><div class="small">${v.kind === 'return' ? '<span class="pill warn">Return</span> ' + esc(R.itemName(b, b.items[v.data.ret.sku])) : `${tot.items} item${tot.items > 1 ? 's' : ''} · <span class="num">${M(tot.sub)}</span> · ${R.payMethod(c) === 'card' ? 'Card' : 'Cash'}${tot.gifts && b.equip.giftwrap ? ' · wants gift wrap' : ''}`}</div>${busy ? `<div class="small muted">${esc(by)}</div>` : `<div class="row small" style="gap:6px;margin-top:3px">${meter(w, c.patience, w / c.patience > 0.7 ? 'bad' : w / c.patience > 0.4 ? 'warn' : 'good')}<span class="num muted">${w} min</span></div>`}</div>${busy ? '' : `<button class="btn ${v.kind === 'return' ? '' : 'pri'}" data-a="serve" data-c="${c.id}">${v.kind === 'return' ? 'Handle return' : 'Serve'}</button>`}</div>`; }).join('')}</div>` : '<div class="empty">No one is waiting.</div>'}</div>
+     return `<div class="qcard ${busy ? 'busy' : ''}"><div><b>${esc(c.name)}</b> <span class="small muted">${esc(R.typeLabel(b, c))}</span><div class="small">${v.kind === 'return' ? '<span class="pill warn">Return</span> ' + esc(R.itemName(b, b.items[v.data.ret.sku])) : `${tot.items} item${tot.items > 1 ? 's' : ''} · <span class="num">${M(tot.sub)}</span> · ${R.payMethod(c) === 'card' ? 'Card' : 'Cash'}${tot.gifts && b.equip.giftwrap ? ' · wants gift wrap' : ''}`}</div>${busy ? `<div class="small muted">${esc(by)}</div>` : `<div class="small muted" style="margin-top:3px">Waiting <span class="num ${w > 20 ? 'negc' : ''}">${w} min</span></div>`}</div>${busy ? '' : `<button class="btn ${v.kind === 'return' ? '' : 'pri'}" data-a="serve" data-c="${c.id}">${v.kind === 'return' ? 'Handle return' : 'Serve'}</button>`}</div>`; }).join('')}</div>` : '<div class="empty">No one is waiting.</div>'}</div>
   <div class="stack"><div class="card"><h2>Registers</h2>${Array.from({ length: regs }, (_, i) => { const e = cashiers.filter(x => x.on)[i]; const c = e && e.task && e.task.cid ? b.cust[e.task.cid] : null; return `<div class="li"><span>Register ${i + 1}</span><span class="small">${e ? `${esc(e.name)}: ${c ? 'serving ' + esc(c.name) : 'waiting for customers'}` : (i === 0 ? 'You (manual checkout)' : '<span class="muted">No cashier</span>')}</span></div>`; }).join('')}
    ${cashiers.length > regs ? `<div class="alert warn mt8">You have ${cashiers.length} cashiers but ${regs} registers. Buy another register in Equipment.</div>` : ''}${!cashiers.length ? `<div class="row mt8"><button class="btn" data-a="nav" data-v="employees">Hire a cashier</button></div>` : ''}</div>
    <div class="card"><h2>Shopping now <span class="num muted">(${browsing.length})</span></h2>${browsing.length ? browsing.slice(0, 12).map(c => `<div class="li small"><span>${esc(c.name)} <span class="muted">${esc(R.typeLabel(b, c))}</span></span><span class="pill">${{ browsing: 'Browsing', fitting: 'In fitting room', fitwait: 'Waiting for a fitting room' }[c.visit.phase]}</span></div>`).join('') : '<div class="empty">The aisles are quiet.</div>'}</div></div></div>`;
@@ -1762,7 +1767,7 @@ V.customers = () => {
   if (UI.custF === 'here') list = list.filter(c => c.visit); else if (UI.custF === 'loyal') list = list.filter(c => c.loyalty >= 60); else if (UI.custF === 'unhappy') list = list.filter(c => c.sat < 45 && c.visits);
   list.sort((a, c) => (c.visit ? 1 : 0) - (a.visit ? 1 : 0) || c.spent - a.spent);
   const st = c => !c.visit ? '' : `<span class="pill info">${{ browsing: 'Shopping', fitting: 'Fitting room', fitwait: 'Waiting to try on', queue: 'In queue', register: 'At register' }[c.visit.phase]}</span>`;
-  return header('Customers', `${Object.keys(b.cust).length} people shop at ${esc(b.name)}. Each has a budget, tastes, patience and a memory of how you treated them.`) +
+  return header('Customers', `${Object.keys(b.cust).length} people shop at ${esc(b.name)}. Each has a budget, tastes and a memory of how you treated them.`) +
   `<div class="row" style="margin-bottom:10px"><div class="seg" role="group" aria-label="Filter">${[['all', 'Everyone'], ['here', 'In store now'], ['loyal', 'Loyal'], ['unhappy', 'Unhappy']].map(([k, l]) => `<button data-a="custF" data-k="${k}" aria-pressed="${UI.custF === k}">${l}</button>`).join('')}</div><input type="text" data-c="custQ" placeholder="Search by name" value="${esc(UI.custQ)}" aria-label="Search customers"></div>
   <div class="tw"><table><thead><tr><th>Customer</th><th>Type</th><th>Likes</th><th class="n">Visits</th><th class="n">Spent</th><th>Satisfaction</th><th>Loyalty</th><th>Now</th></tr></thead><tbody>${list.slice(0, 150).map(c => `<tr class="click" data-a="cust" data-c="${c.id}"><td><div class="nm">${esc(c.name)}</div><div class="sb num">${c.id.toUpperCase()}</div></td><td class="small">${esc(R.typeLabel(b, c))}</td><td class="small">${esc((c.prefs || []).join(', '))}${c.size ? ' · size ' + c.size : ''}${c.childAge != null && c.childAge < 20 ? ' · child age ' + c.childAge : ''}</td><td class="n">${c.visits}</td><td class="n">${M(c.spent)}</td><td><div class="row" style="gap:6px">${meter(c.sat, 100, c.sat < 45 ? 'bad' : c.sat < 65 ? 'warn' : 'good')}<span class="num small">${c.sat}</span></div></td><td><div class="row" style="gap:6px">${meter(c.loyalty, 100)}<span class="num small">${Math.round(c.loyalty)}</span></div></td><td>${st(c)}</td></tr>`).join('') || '<tr><td colspan="8"><div class="empty">No customers match.</div></td></tr>'}</tbody></table></div>`;
 };
@@ -1843,7 +1848,7 @@ MD.po = m => {
 MD.cust = m => {
   const b = R.branchOf(S, m.bid), c = b.cust[m.cid]; const ty = R.custType(b, c);
   return dlg(esc(c.name), `${esc(ty.label)} · customer since day ${c.since} · ${c.id.toUpperCase()}`, `<div class="grid g3"><div class="tile"><div class="k">Satisfaction</div><div class="v">${c.sat}</div></div><div class="tile"><div class="k">Loyalty</div><div class="v">${Math.round(c.loyalty)}</div></div><div class="tile"><div class="k">Total spent</div><div class="v">${M(c.spent)}</div></div></div>
-  <div class="li small mt"><span>Typical budget per visit</span><b class="num">${M(c.budget)}</b></div><div class="li small"><span>Price tolerance above list</span><b class="num">${Math.round(c.tol * 100)}%</b></div><div class="li small"><span>Patience in line</span><b class="num">${c.patience} min</b></div><div class="li small"><span>Usually pays by</span><b>${c.pay}</b></div><div class="li small"><span>Favorite sections</span><b>${esc((c.prefs || []).join(', '))}</b></div>${c.size ? `<div class="li small"><span>Sizes</span><b>${c.size}, shoe ${c.shoe}, likes ${c.color.toLowerCase()}, brand ${c.brand}</b></div>` : ''}${c.childAge != null && c.childAge < 20 ? `<div class="li small"><span>Shops for a child aged</span><b>${c.childAge}</b></div>` : ''}<div class="li small"><span>Visits</span><b class="num">${c.visits}</b></div>
+  <div class="li small mt"><span>Typical budget per visit</span><b class="num">${M(c.budget)}</b></div><div class="li small"><span>Price tolerance above list</span><b class="num">${Math.round(c.tol * 100)}%</b></div><div class="li small"><span>Usually pays by</span><b>${c.pay}</b></div><div class="li small"><span>Favorite sections</span><b>${esc((c.prefs || []).join(', '))}</b></div>${c.size ? `<div class="li small"><span>Sizes</span><b>${c.size}, shoe ${c.shoe}, likes ${c.color.toLowerCase()}, brand ${c.brand}</b></div>` : ''}${c.childAge != null && c.childAge < 20 ? `<div class="li small"><span>Shops for a child aged</span><b>${c.childAge}</b></div>` : ''}<div class="li small"><span>Visits</span><b class="num">${c.visits}</b></div>
   <h3 class="mt">Recent visits</h3>${c.hist.length ? c.hist.map(h => `<div class="li small"><span>Day ${h.day} ${R.fmtTime(h.t)} · ${esc(h.note)}</span><b class="num ${h.total < 0 ? 'negc' : ''}">${h.total ? M(h.total) : ''}</b></div>`).join('') : '<div class="empty">No visits recorded yet.</div>'}`, '<button class="btn" data-a="close">Close</button>');
 };
 MD.wizard = m => {

@@ -15,7 +15,7 @@ This is the **first playable prototype**: a single self-contained web page with 
 ## What's in the prototype
 
 - **Headquarters:** company cash, today's revenue, expenses and profit, a performance table for every store, alerts, and expansion opportunities.
-- **Checkout:** customers queue with their own baskets and patience. You serve them by card or cash and enter the change. Cashiers you hire take over the registers.
+- **Checkout:** customers form a line with their own baskets and stay in it until they're served, even after closing time. Each customer decides whether to pay by card or cash; for cash you enter what you were handed and the change is worked out. Cashiers you hire take over the registers.
 - **Customers:** each one has a type, a budget, tastes, price tolerance, loyalty, satisfaction and purchase history.
 - **Suppliers and orders:** compare suppliers, sign contracts, and place purchase orders, either your own quantities or suggested ones. Orders are paid when placed and arrive hours later.
 - **Deliveries:** a delivery must be checked in before it becomes stock. Shortages and damaged units are credited back. You can also refuse a delivery.
@@ -53,6 +53,7 @@ Make your changes in `src/`, then run `python3 build.py` to rebuild `index.html`
 ```
 node tests/sim.js 14      # one grocery store, played by a simple bot for 14 days
 node tests/multi.js       # all four store types for 30 days
+node tests/queue.js       # customers never leave the checkout line
 node tests/ui.js          # browser test of every screen (requires Playwright)
 ```
 
