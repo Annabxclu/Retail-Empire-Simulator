@@ -597,7 +597,7 @@ function visitSat(S, b, c, outcome) {
   const v = c.visit; let s = 84; const n = Math.max(1, v.wants || 1);
   s -= 38 * v.missed / n + 16 * v.pricey / n - 4 * v.pre;
   if (v.missed && n <= 2) s -= 8;
-  if (v.queueSince != null) { const waited = (v.doneAt || S.t) - v.queueSince; s -= Math.max(0, waited - 5) * 1.6; }
+  if (v.queueSince != null) { const waited = (v.doneAt || S.t) - v.queueSince; s -= Math.min(25, Math.max(0, waited - 5) * 0.8); }
   if (v.fitSince != null && v.fitWaited) s -= v.fitWaited * 1.2;
   if (b.clean < 65) s -= (65 - b.clean) / 2.5;
   if (outcome === 'paid' && v.missed === 0) s += 6;
@@ -1000,7 +1000,7 @@ function dayStart(S) {
     }
     if (units) { st(S, day - 1, b.id).spoil += lost; note(S, b.id, 'warn', `${units} expired units thrown out at ${b.name} (${money(lost)} at cost).`); }
     chargeDaily(S, b, day);
-    for (const e of b.emps) { if (e.on) { e.days++; e.eff = Math.min(1.5, Math.round((e.eff + 0.004) * 1000) / 1000); } e.on = Math.random() < e.rel; e.task = null; if (!e.on) note(S, b.id, 'warn', `${e.name} (${ROLES[e.role].label.toLowerCase()}) called in sick today.`); }
+    for (const e of b.emps) { if (e.on) { e.days++; e.eff = Math.min(1.5, Math.round((e.eff + 0.004) * 1000) / 1000); } releaseTask(b, e); e.on = Math.random() < e.rel; if (!e.on) note(S, b.id, 'warn', `${e.name} (${ROLES[e.role].label.toLowerCase()}) called in sick today.`); }
     refreshApplicants(S, b);
     b.camps = b.camps.filter(c => c.until > S.t);
     b.fitBusy = 0; b.clean = clamp(b.clean + 12, 0, 100);
@@ -1084,16 +1084,16 @@ function branchMinute(S, b, mod) {
       if (v.basket.length > 1 && Math.random() < 0.2) { const l = v.basket.pop(); returnPicks(S, b.items[l.sku], l.picks); }
       else if (v.basket.length === 1 && Math.random() < 0.12) { abandon(S, b, c, 'fit'); continue; }
       toQueue(S, b, c);
-    } else if (v.phase === 'queue') {
-      if (S.t - v.queueSince > c.patience) abandon(S, b, c, 'queue');
-      else if (mod >= SHUT) abandon(S, b, c, 'close');
     }
+    // customers in the checkout line wait as long as it takes; there is no time limit
   }
   // staff
-  if (mod >= OPEN - 60 && mod < SHUT + 15) {
+  const staffHours = mod >= OPEN - 60 && mod < SHUT + 15;
+  if (staffHours || b.queue.length) {
     const regs = b.equip.register || 1; let lane = 0;
     for (const e of b.emps) {
       if (!e.on) continue;
+      if (!staffHours && e.role !== 'cashier') continue;
       if (e.role === 'cashier') {
         lane++; if (lane > regs) { e.task = { idle: 'No free register' }; continue; }
         if (e.task && e.task.cid) {
@@ -1114,7 +1114,11 @@ function branchMinute(S, b, mod) {
       } else if (e.role === 'manager') e.task = { label: 'Supervising the store' };
     }
   }
-  if (mod === SHUT + 15) for (const e of b.emps) e.task = null;
+  if (mod === SHUT + 15 && !b.queue.length) for (const e of b.emps) releaseTask(b, e);
+}
+function releaseTask(b, e) {
+  if (e.task && e.task.cid) { const c = b.cust[e.task.cid]; if (c && c.visit && c.visit.phase === 'register' && c.visit.by === e.id) { c.visit.phase = 'queue'; c.visit.by = null; } }
+  e.task = null;
 }
 function checkGoals(S) {
   for (const g of GOALS) if (!S.goals[g.id] && g.test(S)) { S.goals[g.id] = dayOf(S.t); note(S, null, 'good', `Goal reached: ${g.text}.`); }
@@ -1150,6 +1154,7 @@ function audit(S) {
   for (const b of S.branches) {
     for (const it of Object.values(b.items)) for (const x of it.batches) if (x.s < 0 || x.r < 0 || !Number.isFinite(x.s) || !Number.isFinite(x.r)) issues.push(`${b.name}: negative stock on ${it.sku}`);
     for (const cid of b.queue) { const c = b.cust[cid]; if (!c || !c.visit) issues.push(`${b.name}: queue holds a customer who is not visiting`); }
+    for (const cid of b.queue) { const v = b.cust[cid] && b.cust[cid].visit; if (v && v.phase === 'register' && v.by !== 'you' && !b.emps.some(e => e.id === v.by && e.task && e.task.cid === cid)) issues.push(`${b.name}: customer stuck at a register nobody is running`); }
     if (new Set(b.queue).size !== b.queue.length) issues.push(`${b.name}: customer appears twice in queue`);
     for (const [pid, on] of Object.entries(b.listed)) if (on && !TYPES[b.type].pmap[pid]) issues.push(`${b.name}: unknown listed product`);
     const fu = facingsUsed(b), fc = facings(b); for (const k of Object.keys(fu)) if (fu[k] > fc[k]) issues.push(`${b.name}: more products listed than ${k} facings`);
