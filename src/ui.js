@@ -23,6 +23,10 @@ const dur = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60 ? (m % 
 const icon = n => ({
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg>',
+  shelf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4v16M21 4v16M3 9h18M3 15h18"/><path d="M6 6h3v3H6zM12 6h3v3h-3zM7 12h3v3H7zM14 12h4v3h-4z" stroke-width="1.5"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
+  till: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="9" rx="1"/><path d="M6 11V5h8v6M14 8h4l1 3"/><path d="M7 15h2M11 15h2M15 15h2"/></svg>',
+  truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 6h12v10H2zM14 9h4l4 4v3h-8z"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>',
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></svg>'
 })[n];
 
@@ -43,7 +47,7 @@ function load() {
   try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return null; const o = JSON.parse(raw); if (o && o.v === 2 && o.branches) return o; } catch (e) {}
   return null;
 }
-function attach(st) { S = st; S.onNote = n => { if (n.level === 'warn' || n.level === 'good' || /arrived/.test(n.text)) toast(n.text, n.level); }; UI.bid = S.branches[0].id; }
+function attach(st) { S = R.noSpoil(st); S.onNote = n => { if (n.level === 'warn' || n.level === 'good' || /arrived/.test(n.text)) toast(n.text, n.level); }; UI.bid = S.branches[0].id; }
 function lockCheck() {
   try {
     const raw = localStorage.getItem(LOCK_KEY); const l = raw ? JSON.parse(raw) : null; const now = Date.now();
@@ -112,6 +116,8 @@ function renderNav() {
   h += `<div class="grp">Store</div><label class="sr" for="brSel" style="position:absolute;left:-9999px">Store</label><select id="brSel" data-c="pickBranch">${S.branches.map(x => `<option value="${x.id}" ${x.id === b.id ? 'selected' : ''}>${esc(x.name)} (${R.TYPES[x.type].short})</option>`).join('')}</select>`;
   for (const [v, l] of NAV_BR) h += `<button class="nv" data-a="nav" data-v="${v}" ${UI.view === v ? 'aria-current="page"' : ''}>${l}${badge[v] ? `<span class="badge">${badge[v]}</span>` : ''}</button>`;
   $('side').innerHTML = h; $('brandName').textContent = S.company;
+  const tabs = [['floor', 'Floor', icon('shelf'), badge.floor], ['stockroom', 'Stockroom', icon('box'), badge.stockroom], ['checkout', 'Checkout', icon('till'), badge.checkout], ['suppliers', 'Order', icon('truck'), badge.deliveries]];
+  $('tabbar').innerHTML = tabs.map(([v, l, ic, n]) => `<button data-a="nav" data-v="${v}" ${UI.view === v ? 'aria-current="page"' : ''}>${ic}<span>${l}</span>${n ? `<i class="tb">${n}</i>` : ''}</button>`).join('') + `<button data-a="menu" ${!tabs.some(t => t[0] === UI.view) ? 'aria-current="page"' : ''}>${icon('menu')}<span>More</span></button>`;
   $('side').classList.toggle('open', UI.nav);
   $('brandSub').textContent = isBranchView() ? `${b.name} · ${R.TYPES[b.type].label} · ${R.LOCS[b.loc].name}` : `${S.branches.length} store${S.branches.length > 1 ? 's' : ''} · ${S.mode === 'sandbox' ? 'Sandbox' : 'Career'} mode`;
 }
@@ -132,11 +138,9 @@ function alertsFor(b) {
   let empty = 0, low = 0, exp = 0;
   if (b.setup) out.push(['warn', `${b.name} hasn't opened yet. Follow the opening checklist`, 'overview']);
   const dk = R.atDock(b).length; if (dk) out.push(['warn', `${dk} box${dk > 1 ? 'es' : ''} at the back door waiting to be unpacked`, 'stockroom']);
-  const xb = b.cases.filter(c => R.caseExpired(S, c)).length; if (xb) out.push(['bad', `${xb} expired box${xb > 1 ? 'es' : ''} in the stockroom. Throw them out`, 'stockroom']);
   for (const it of Object.values(b.items)) { if (!b.listed[it.pid]) continue; const sh = R.itShelf(it), sk = R.itStock(b, it); if (sh === 0) empty++; if (sh + sk + R.onOrder(S, b, it.sku) < it.min) low++; for (const x of it.batches) if (x.exp != null && x.exp <= day() && x.s) exp += x.s; }
   if (empty) out.push(['bad', `${empty} empty shelf space${empty > 1 ? 's' : ''} on the store floor`, 'floor']);
   if (low) out.push(['warn', `${low} stock line${low > 1 ? 's' : ''} below the reorder point`, 'suppliers']);
-  if (exp) out.push(['warn', `${exp} units on the shelves expire tonight. Lower prices or accept the loss`, 'floor']);
   if (b.clean < 60) out.push(['warn', `Store cleanliness is ${Math.round(b.clean)}%. Customers notice`, 'overview']);
   if (S.cash < 0) out.push(['bad', 'Company cash is negative. Cut costs or sell stock quickly', 'finance']);
   return out;
@@ -193,7 +197,7 @@ V.finance = () => {
   const [d0, d1, lbl] = rangeDays(); const bid = UI.finB || null;
   const s = R.sumStats(S, d0, d1, bid);
   const scope = bid ? R.branchOf(S, bid).name : 'Company, consolidated';
-  const rows = [['Sales', s.rev], ['Returns and refunds', -s.refunds], ['Net sales', s.rev - s.refunds, 1], ['Cost of goods sold', -s.cogs], ['Gross profit', s.gross, 1], ['Rent', -s.rent], ['Wages', -s.wages], ['Utilities', -s.util], ['Equipment upkeep', -s.maint], ['Marketing', -s.mkt], ['Delivery fees and contracts', -s.fees], ['Spoilage and waste', -s.spoil], ['Net profit', s.net, 2]];
+  const rows = [['Sales', s.rev], ['Returns and refunds', -s.refunds], ['Net sales', s.rev - s.refunds, 1], ['Cost of goods sold', -s.cogs], ['Gross profit', s.gross, 1], ['Rent', -s.rent], ['Wages', -s.wages], ['Utilities', -s.util], ['Equipment upkeep', -s.maint], ['Marketing', -s.mkt], ['Delivery fees and contracts', -s.fees], ['Waste (boxes thrown out)', -s.spoil], ['Net profit', s.net, 2]];
   const cats = Object.entries(s.cats).sort((a, b) => b[1] - a[1]);
   const byB = S.branches.map(b => ({ b, s: R.sumStats(S, d0, d1, b.id) }));
   const days = []; for (let d = Math.max(1, day() - 13); d <= day(); d++) { const x = R.sumStats(S, d, d, bid); days.push({ d, rev: x.rev - x.refunds, net: x.net }); }
@@ -282,10 +286,8 @@ V.overview = () => {
 function specialPanel(b) {
   const TT = T(b), d = day();
   if (b.type === 'grocery') {
-    const exp = []; for (const it of Object.values(b.items)) for (const x of it.batches) if (x.exp != null && x.exp <= d + 1 && x.s + x.r) exp.push({ it, x });
-    exp.sort((a, c) => a.x.exp - c.x.exp);
-    const locked = TT.upgrades.filter(u => !b.upg.includes(u.id));
-    return `<div class="card"><h2>Fresh food</h2><p class="small muted" style="margin-top:0">Expired stock is pulled off the shelves at midnight and counted as spoilage. Expired boxes stay in the stockroom, taking up space, until you throw them out.</p>${exp.length ? exp.slice(0, 7).map(({ it, x }) => `<div class="li small"><span>${esc(R.itemName(b, it))}</span><span class="row"><span class="num">${x.s + x.r} units</span><span class="pill ${x.exp <= d ? 'bad' : 'warn'}">${x.exp <= d ? 'Expires tonight' : 'Expires tomorrow'}</span></span></div>`).join('') : '<div class="empty">Nothing expires in the next two days.</div>'}
+    const locked = TT.upgrades.filter(u => !b.upg.includes(u.id)); const f = R.facings(b), fu = R.facingsUsed(b);
+    return `<div class="card"><h2>Departments & cold storage</h2>${Object.keys(f).map(k => `<div class="li small"><span>${TT.facings[k]}</span><b class="num">${fu[k]} / ${f[k]} used</b></div>`).join('')}<p class="small muted">Chilled and frozen products need refrigerated or freezer space on the floor. Nothing spoils, so stock as deep as your racks allow.</p>
     <h3 class="mt">Departments</h3><div class="row">${b.depts.map(x => `<span class="pill good">${esc(x)}</span>`).join('')}${locked.map(u => `<span class="pill">${esc(u.name)}: locked</span>`).join('')}</div></div>`;
   }
   if (b.type === 'clothing') {
@@ -321,7 +323,7 @@ V.checkout = () => {
 
 /* ---- stock: shared bits ---- */
 function boxName(b, c) { const it = b.items[c.sku]; return R.itemName(b, it); }
-function boxExp(c) { if (c.exp == null) return ''; const d = day(); return c.exp < d ? '<span class="pill bad">Expired</span>' : c.exp === d ? '<span class="pill warn">Use today</span>' : `<span class="small muted">use by day ${c.exp}</span>`; }
+function boxExp(c) { return ''; if (c.exp == null) return ''; const d = day(); return c.exp < d ? '<span class="pill bad">Expired</span>' : c.exp === d ? '<span class="pill warn">Use today</span>' : `<span class="small muted">use by day ${c.exp}</span>`; }
 function handsBar(b, where) {
   const h = R.inHands(b), cap = R.handsCap(b);
   return `<div class="hands"><div class="row" style="justify-content:space-between"><b>In your hands</b><span class="small muted num">${h.length} / ${cap} boxes</span></div>
@@ -400,11 +402,11 @@ function invRows(b) {
 V.inventory = () => {
   const b = B(), TT = T(b);
   const items = invRows(b);
-  const tabs = [['all', 'On display'], ['empty', 'Empty shelves'], ['low', 'Below reorder point'], ['stockroom', 'In boxes']]; if (b.type === 'grocery') tabs.push(['expiring', 'Expiring']);
+  const tabs = [['all', 'On display'], ['empty', 'Empty shelves'], ['low', 'Below reorder point'], ['stockroom', 'In boxes']]; 
   return header('Inventory list', 'Every product in one table: what is on the shelves, what is still in boxes, and what is on order. Restock on the Store floor.', `<button class="btn pri" data-a="nav" data-v="floor">Go to store floor</button>`) +
   `<div class="row" style="margin-bottom:10px"><div class="seg" role="group" aria-label="Filter">${tabs.map(([k, l]) => `<button data-a="invTab" data-k="${k}" aria-pressed="${UI.invTab === k}">${l}</button>`).join('')}</div><input type="text" id="invQ" data-c="invQ" placeholder="Search products" value="${esc(UI.invQ)}" aria-label="Search products"><select data-c="invCat" aria-label="Category"><option value="">All categories</option>${TT.cats.map(c => `<option ${UI.invCat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
   <div class="tw"><table><thead><tr><th>Product</th><th class="n">Shelf</th><th class="n">In boxes</th><th class="n">On order</th><th class="n">Box</th><th class="n">Cost</th><th class="n">Price</th><th class="n">Margin</th><th class="n">Sold today</th><th class="n">Missed</th><th class="n">Reorder at</th><th class="n">Reorder qty</th></tr></thead><tbody>${items.slice(0, 300).map(it => { const p = TT.pmap[it.pid]; const sh = R.itShelf(it), sk = R.itStock(b, it), nb = b.cases.filter(c => c.sku === it.sku).length, mx = R.shelfMaxOf(b, p), cost = R.avgCost(b, it), pr = R.effPrice(S, b, it); const mg = pr ? Math.round((pr - cost) / pr * 100) : 0; const ex = it.batches.filter(x => x.exp != null && x.s).map(x => x.exp)[0];
-    return `<tr><td><div class="nm">${esc(p.name)}</div><div class="sb">${esc(it.label || p.cat)}${!b.listed[it.pid] ? ' · <b>not on display</b>' : ''}${ex != null ? ` · shelf use by day ${ex}` : ''}</div></td><td class="n ${b.listed[it.pid] && sh === 0 ? 'negc' : ''}">${sh}/${mx}</td><td class="n">${sk ? `${sk} <span class="muted">(${nb} box${nb === 1 ? '' : 'es'})</span>` : ''}</td><td class="n">${R.onOrder(S, b, it.sku) || ''}</td><td class="n">${R.packOf(b, it)}</td><td class="n">${M(cost)}</td><td class="n">${M(pr)}</td><td class="n ${mg < 15 ? 'negc' : ''}">${mg}%</td><td class="n">${it.soldT}</td><td class="n ${it.missT ? 'negc' : ''}">${it.missT || ''}</td>
+    return `<tr><td><div class="nm">${esc(p.name)}</div><div class="sb">${esc(it.label || p.cat)}${!b.listed[it.pid] ? ' · <b>not on display</b>' : ''}</div></td><td class="n ${b.listed[it.pid] && sh === 0 ? 'negc' : ''}">${sh}/${mx}</td><td class="n">${sk ? `${sk} <span class="muted">(${nb} box${nb === 1 ? '' : 'es'})</span>` : ''}</td><td class="n">${R.onOrder(S, b, it.sku) || ''}</td><td class="n">${R.packOf(b, it)}</td><td class="n">${M(cost)}</td><td class="n">${M(pr)}</td><td class="n ${mg < 15 ? 'negc' : ''}">${mg}%</td><td class="n">${it.soldT}</td><td class="n ${it.missT ? 'negc' : ''}">${it.missT || ''}</td>
     <td class="n"><input class="qty" type="number" min="0" max="999" value="${it.min}" data-c="setMin" data-s="${esc(it.sku)}" aria-label="Reorder point"></td><td class="n"><input class="qty" type="number" min="1" max="999" value="${it.reorder}" data-c="setRe" data-s="${esc(it.sku)}" aria-label="Reorder quantity"></td></tr>`; }).join('') || `<tr><td colspan="12"><div class="empty">Nothing matches.</div></td></tr>`}</tbody></table></div>
   ${items.length > 300 ? `<p class="small muted">Showing 300 of ${items.length}. Narrow the search.</p>` : ''}<p class="small muted">"Missed" counts customers who wanted the item today and found the shelf empty. "Reorder at" and "Reorder qty" (in units) drive suggested orders and the store manager.</p>`;
 };
@@ -412,7 +414,7 @@ V.inventory = () => {
 V.products = () => {
   const b = B(), TT = T(b); const f = R.facings(b), fu = R.facingsUsed(b);
   const prods = TT.catalog.filter(p => !UI.prodCat || p.cat === UI.prodCat);
-  const info = p => b.type === 'grocery' ? `${p.cold ? (p.cold === 'fridge' ? 'Refrigerated' : 'Frozen') + ' · ' : ''}${p.life ? `keeps ${p.life} days` : 'Shelf-stable'}` :
+  const info = p => b.type === 'grocery' ? `${p.cold ? (p.cold === 'fridge' ? 'Refrigerated' : 'Frozen') + ' · ' : ''}${p.cold ? '' : 'Shelf'}` :
     b.type === 'clothing' ? `${esc(p.brand)} · ${p.sizes.join('/')} · ${p.colors.join(', ')}${p.season !== 'all' ? ` · ${p.season} collection` : ''}` :
     b.type === 'toy' ? `${esc(p.brand)} · ages ${p.age[0]}${p.age[1] >= 99 ? '+' : '–' + p.age[1]} · popularity ${p.pop}${S.market.hot === p.id && S.market.hotUntil > S.t ? ' · <b>trending</b>' : ''}${p.col ? ' · collectible' : ''}` :
     `${esc(p.author)} · ${esc(p.pub)} · ISBN ${p.isbn}${p.release > day() ? ` · <b>releases day ${p.release}</b>` : ''}`;
@@ -504,20 +506,26 @@ MD.serve = m => {
 };
 MD.order = m => {
   const b = R.branchOf(S, m.bid), s = R.SUPPLIERS[m.sup], TT = T(b);
-  const items = R.supItems(b, m.sup).filter(it => !m.cat || TT.pmap[it.pid].cat === m.cat).filter(it => !m.onlyListed || b.listed[it.pid]);
+  const all = R.supItems(b, m.sup);
+  const items = all.filter(it => !m.cat || TT.pmap[it.pid].cat === m.cat).filter(it => !m.onlyListed || b.listed[it.pid]);
   const groups = {}; for (const it of items) (groups[it.pid] = groups[it.pid] || []).push(it);
-  const body = `<p class="small muted" style="margin-top:0">You order by the box. Every box goes to the back door, then onto a rack in the stockroom.</p><div class="row" style="margin-bottom:10px"><button class="btn" data-a="orderSuggest">Suggest for low stock</button><button class="btn" data-a="orderClear">Clear</button><select data-c="orderCat" aria-label="Category"><option value="">All categories</option>${[...new Set(R.supItems(b, m.sup).map(i => TT.pmap[i.pid].cat))].map(c => `<option ${m.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><label class="row small"><input type="checkbox" data-c="orderListed" ${m.onlyListed ? 'checked' : ''}> Only products already on display</label></div>
-  <div class="tw"><table><thead><tr><th>Product</th><th class="n">Have</th><th class="n">Box of</th><th class="n">Per unit</th><th class="n">Per box</th><th class="n">Sells for</th><th class="n">Boxes</th></tr></thead><tbody>${Object.entries(groups).map(([pid, its]) => { const p = TT.pmap[pid]; const unrel = b.type === 'book' && p.release > day() + 2;
-    const info = b.type === 'grocery' ? (p.life ? `keeps ${p.life} days` : 'shelf-stable') + (p.cold ? `, ${p.cold === 'fridge' ? 'refrigerated' : 'frozen'}` : '') : p.cat;
-    return (its.length > 1 ? `<tr class="sub"><td colspan="6"><b>${esc(p.name)}</b> <span class="small muted">${esc(p.cat)}${b.listed[pid] ? '' : ' · not on display'}</span></td><td class="n"><button class="btn sm" data-a="orderRun" data-p="${pid}">+1 of each</button></td></tr>` : '') +
-    its.map(it => { const u = R.supUnit(b, m.sup, it.sku), pk = R.packOf(b, it); return `<tr><td>${its.length > 1 ? `<span style="padding-left:12px">${esc(it.label)}</span>` : `<div class="nm">${esc(p.name)}</div><div class="sb">${esc(info)}${b.listed[pid] ? '' : ' · not on display yet'}${unrel ? ` · orderable from day ${p.release - 2}` : ''}</div>`}</td><td class="n">${R.itShelf(it) + R.itStock(b, it)}${R.onOrder(S, b, it.sku) ? ` <span class="muted">+${R.onOrder(S, b, it.sku)}</span>` : ''}</td><td class="n">${pk}</td><td class="n">${M(u)}</td><td class="n">${M(u * pk)}</td><td class="n">${M(it.price)}</td><td class="n"><input class="qty" type="number" min="0" max="99" value="${m.qty[it.sku] || ''}" data-c="oq" data-s="${esc(it.sku)}" aria-label="Boxes of ${esc(R.itemName(b, it))}" ${unrel ? 'disabled' : ''}></td></tr>`; }).join(''); }).join('')}</tbody></table></div>`;
-  return dlg(`New order: ${esc(s.name)}`, `Delivery in about ${dur(s.lead)} · fee ${M(s.fee)} · minimum ${M(s.minOrder)} · ${R.freeSlots(b).length - R.atDock(b).length} free rack spaces`, body, `<div id="orderSum" style="flex:1">${orderSum()}</div><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="orderPlace">Place order</button>`, 'wide');
+  const cats = [...new Set(all.map(i => TT.pmap[i.pid].cat))];
+  const qsel = it => { const v = +m.qty[it.sku] || 0; const dis = b.type === 'book' && TT.pmap[it.pid].release > day() + 2;
+    return `<select class="qsel ${v ? 'on' : ''}" data-c="oq" data-s="${esc(it.sku)}" aria-label="Boxes of ${esc(R.itemName(b, it))}" ${dis ? 'disabled' : ''}>${Array.from({ length: 21 }, (_, n) => `<option value="${n}" ${n === v ? 'selected' : ''}>${n ? n + (n === 1 ? ' box' : ' boxes') : 'None'}</option>`).join('')}</select>`; };
+  const row = (it, p, sub) => { const u = R.supUnit(b, m.sup, it.sku), pk = R.packOf(b, it), have = R.itShelf(it) + R.itStock(b, it), oo = R.onOrder(S, b, it.sku);
+    return `<div class="orow"><div class="oinfo"><div class="nm">${sub ? esc(it.label) : esc(p.name)}</div><div class="small muted">Box of ${pk} · <span class="num">${M(u * pk)}</span> a box · sells ${M(it.price)} each</div><div class="small ${have ? 'muted' : ''}">${have ? `You have ${have}` : '<span class="negc">None in store</span>'}${oo ? ` · ${oo} on the way` : ''}</div></div>${qsel(it)}</div>`; };
+  const body = `<div class="ofilters"><select data-c="orderCat" aria-label="Category"><option value="">All categories</option>${cats.map(c => `<option ${m.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><label class="row small"><input type="checkbox" data-c="orderListed" ${m.onlyListed ? 'checked' : ''}> Only what I already sell</label><button class="btn sm" data-a="orderSuggest">Fill in for low stock</button>${Object.keys(m.qty).length ? '<button class="btn sm" data-a="orderClear">Clear all</button>' : ''}</div>
+  <div class="olist">${Object.entries(groups).map(([pid, its]) => { const p = TT.pmap[pid]; const unrel = b.type === 'book' && p.release > day() + 2;
+    const tag = p.cold ? `<span class="pill info">${p.cold === 'fridge' ? 'Chilled' : 'Frozen'}</span>` : '';
+    if (its.length === 1) return `<div class="ogrp">${tag || unrel ? `<div class="row" style="gap:6px">${tag}${unrel ? `<span class="pill">Orderable from day ${p.release - 2}</span>` : ''}</div>` : ''}${row(its[0], p)}</div>`;
+    return `<div class="ogrp"><div class="row" style="justify-content:space-between"><div><div class="nm">${esc(p.name)}</div><div class="small muted">${esc(p.cat)}${b.type === 'book' ? ' · ' + esc(p.author) : ''}</div></div><button class="btn sm" data-a="orderRun" data-p="${pid}">+1 of each</button></div>${its.map(it => row(it, p, true)).join('')}</div>`; }).join('') || '<div class="empty">Nothing here. Change the filter.</div>'}</div>`;
+  return dlg(`Order from ${esc(s.name)}`, `Arrives in about ${dur(s.lead)} · delivery ${M(s.fee)} · minimum ${M(s.minOrder)}`, body, `<div id="orderSum" class="osum">${orderSum()}</div><div class="row"><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="orderPlace">Place order</button></div>`, 'wide');
 };
 function orderSum() {
   const m = UI.modal; const b = R.branchOf(S, m.bid);
   const q = R.quoteOrder(S, b, m.sup, Object.entries(m.qty).map(([sku, n]) => ({ sku, cases: +n || 0 })));
   const s = R.SUPPLIERS[m.sup]; const free = R.freeSpace(S, b);
-  return `<span class="num">${q.cases} boxes (${q.units} units) · ${M(q.sub)} + ${M(q.fee)} fee = <b>${M(q.total)}</b></span>${q.sub && q.sub < s.minOrder ? ` <span class="pill warn">Below minimum</span>` : ''}${q.cases > free ? ` <span class="pill warn">Only ${free} free rack spaces</span>` : ''}${q.total > S.cash ? ' <span class="pill bad">Not enough cash</span>' : ''}`;
+  return `<div><b class="num">${M(q.total)}</b> <span class="small muted">${q.cases} box${q.cases === 1 ? '' : 'es'} + ${M(q.fee)} delivery</span></div><div class="row" style="gap:4px">${q.sub && q.sub < s.minOrder ? `<span class="pill warn">Add ${M(s.minOrder - q.sub)} more to reach the minimum</span>` : ''}${q.cases > free ? `<span class="pill warn">Only ${free} free rack spaces: the rest will wait at the back door</span>` : ''}${q.total > S.cash ? ' <span class="pill bad">Not enough cash</span>' : ''}</div>`;
 }
 MD.review = m => {
   const po = S.pos.find(p => p.id === m.po); const b = R.branchOf(S, po.bid);
@@ -563,7 +571,7 @@ MD.preview = m => {
   return dlg(`${TT.label}: preview`, TT.desc, `<h3>Suppliers</h3>${TT.suppliers.map(id => { const s = R.SUPPLIERS[id]; return `<div class="li small"><span><b>${esc(s.name)}</b> · ${esc(s.kind)}</span><span class="num">${dur(s.lead)} · ${Math.round(s.rel * 100)}% reliable${s.contract ? ' · contract ' + M(s.contract) : ' · included'}</span></div>`; }).join('')}
   <h3 class="mt">Customers you will meet</h3><div class="row">${TT.custTypes.map(c => `<span class="pill">${esc(c.label)}</span>`).join('')}</div>
   <h3 class="mt">Equipment</h3><div class="row">${TT.equip.map(e => `<span class="pill">${esc(e.name)} ${M(e.cost)}</span>`).join('')}</div>
-  <h3 class="mt">Catalog</h3><div class="tw"><table><thead><tr><th>Product</th><th>Category</th><th>Details</th><th class="n">Cost</th><th class="n">Price</th></tr></thead><tbody>${TT.catalog.map(p => { const its = R.itemsOf(m.type, p); return `<tr><td>${esc(p.name)}</td><td class="small">${esc(p.cat)}</td><td class="small">${m.type === 'clothing' ? `${its.length} size/color variants` : m.type === 'book' ? esc(p.author) + ' · ' + its.map(i => i.label).join(', ') : m.type === 'toy' ? `Ages ${p.age[0]}${p.age[1] >= 99 ? '+' : '–' + p.age[1]}` : (p.life ? `Keeps ${p.life} days` : 'Shelf-stable') + (p.cold ? ', ' + p.cold : '')}</td><td class="n">${M(its[0].cost)}</td><td class="n">${M(its[0].price)}</td></tr>`; }).join('')}</tbody></table></div>`, `<button class="btn" data-a="close">Close</button><button class="btn pri" data-a="wizard" data-t="${m.type}">Open one</button>`, 'wide');
+  <h3 class="mt">Catalog</h3><div class="tw"><table><thead><tr><th>Product</th><th>Category</th><th>Details</th><th class="n">Cost</th><th class="n">Price</th></tr></thead><tbody>${TT.catalog.map(p => { const its = R.itemsOf(m.type, p); return `<tr><td>${esc(p.name)}</td><td class="small">${esc(p.cat)}</td><td class="small">${m.type === 'clothing' ? `${its.length} size/color variants` : m.type === 'book' ? esc(p.author) + ' · ' + its.map(i => i.label).join(', ') : m.type === 'toy' ? `Ages ${p.age[0]}${p.age[1] >= 99 ? '+' : '–' + p.age[1]}` : (p.cold ? (p.cold === 'fridge' ? 'Refrigerated' : 'Frozen') : 'Shelf-stable')}</td><td class="n">${M(its[0].cost)}</td><td class="n">${M(its[0].price)}</td></tr>`; }).join('')}</tbody></table></div>`, `<button class="btn" data-a="close">Close</button><button class="btn pri" data-a="wizard" data-t="${m.type}">Open one</button>`, 'wide');
 };
 MD.notes = () => dlg('Notifications', '', S.notes.length ? S.notes.map(n => `<div class="alert ${n.level === 'info' ? '' : n.level}" style="margin-bottom:6px"><div style="flex:1">${esc(n.text)}</div><span class="small muted num" style="white-space:nowrap">D${R.dayOf(n.t)} ${R.fmtTime(n.t)}</span></div>`).join('') : '<div class="empty">No notifications.</div>', '<button class="btn" data-a="close">Close</button>');
 MD.ask = m => dlg('Please confirm', '', `<p style="margin:0">${esc(m.q)}</p>`, `<button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="confirmYes">Yes, continue</button>`, 'narrow');
@@ -649,9 +657,9 @@ const A = {
   custF(d) { UI.custF = d.k; renderMain(); },
   list(d) { res(R.setListed(S, B(), d.p, d.on === '1')); renderMain(); },
   order(d) { const b = B(); openModal({ k: 'order', bid: b.id, sup: d.s, qty: {}, cat: '', onlyListed: Object.keys(b.listed).length >= 8 }); },
-  orderSuggest() { const m = UI.modal; for (const l of R.reorderSuggestion(S, R.branchOf(S, m.bid), m.sup)) m.qty[l.sku] = l.cases; m.keepScroll = true; renderModal(); if (!Object.keys(m.qty).length) toast('Nothing is below its reorder point.'); },
+  orderSuggest() { const m = UI.modal; for (const l of R.reorderSuggestion(S, R.branchOf(S, m.bid), m.sup)) m.qty[l.sku] = Math.min(20, l.cases); m.keepScroll = true; renderModal(); if (!Object.keys(m.qty).length) toast('Nothing is below its reorder point.'); },
   orderClear() { UI.modal.qty = {}; renderModal(); },
-  orderRun(d) { const m = UI.modal; const b = R.branchOf(S, m.bid); for (const it of Object.values(b.items)) if (it.pid === d.p) m.qty[it.sku] = (+m.qty[it.sku] || 0) + 1; m.keepScroll = true; renderModal(); },
+  orderRun(d) { const m = UI.modal; const b = R.branchOf(S, m.bid); for (const it of Object.values(b.items)) if (it.pid === d.p) m.qty[it.sku] = Math.min(20, (+m.qty[it.sku] || 0) + 1); m.keepScroll = true; renderModal(); },
   orderPlace() { const m = UI.modal; const lines = Object.entries(m.qty).map(([sku, q]) => ({ sku, cases: +q || 0 })).filter(l => l.cases > 0); const r = R.placeOrder(S, m.bid, m.sup, lines); if (!res(r)) return; UI.modal = null; renderModal(); toast(`${r.po.id} placed: ${M(r.po.total)}. Arrives around ${R.fmtTime(r.po.eta)}${R.dayOf(r.po.eta) !== day() ? ' on day ' + R.dayOf(r.po.eta) : ''}.`, 'good'); renderMain(); renderTop(); },
   sign(d) { res(R.signSupplier(S, B().id, d.s), `Contract signed with ${R.SUPPLIERS[d.s].name}.`); renderMain(); renderTop(); },
   review(d) { openModal({ k: 'review', po: d.p }); },
@@ -706,18 +714,20 @@ const CH = {
   wz(el) { UI.wiz[el.dataset.k] = el.value; if (el.dataset.k === 'type') UI.wiz.name = suggestName(el.value); renderModal(); },
   wzName(el) { UI.wiz.name = el.value; },
   wzStock(el) { UI.wiz.stock = el.checked; UI.modal.keepScroll = true; renderModal(); }, wzCash(el) { UI.wiz.cashier = el.checked; }, wzGrand(el) { UI.wiz.grand = el.checked; UI.modal.keepScroll = true; renderModal(); },
+  oq(el) { const v = Math.max(0, Math.min(20, Math.round(+el.value || 0))); if (v) UI.modal.qty[el.dataset.s] = v; else delete UI.modal.qty[el.dataset.s]; el.classList.toggle('on', !!v); $('orderSum').innerHTML = orderSum(); },
   orderCat(el) { UI.modal.cat = el.value; renderModal(); }, orderListed(el) { UI.modal.onlyListed = el.checked; renderModal(); }
 };
 const IN = {
   invQ(el) { UI.invQ = el.value; const pos = el.selectionStart; renderMain(); const n = $('invQ'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } },
   custQ(el) { UI.custQ = el.value; const pos = el.selectionStart; renderMain(); const n = document.querySelector('[data-c=custQ]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } },
   cashIn() { onCashIn(); },
-  oq(el) { const v = Math.max(0, Math.min(99, Math.round(+el.value || 0))); if (v) UI.modal.qty[el.dataset.s] = v; else delete UI.modal.qty[el.dataset.s]; $('orderSum').innerHTML = orderSum(); },
+
   wzName(el) { UI.wiz.name = el.value; }
 };
 
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
+  if (UI.nav && !e.target.closest('#side') && !e.target.closest('[data-a=menu]')) { UI.nav = false; renderNav(); if (!e.target.closest('[data-a]')) return; }
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
   if (el.closest('#modal') === null && $('modal').classList.contains('on') && !el.closest('.top')) return;
   const f = A[el.dataset.a]; if (f) { e.preventDefault(); f(el.dataset, el); }

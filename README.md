@@ -2,16 +2,16 @@
 
 A browser-based retail management game. You start with one small grocery store and grow it into a company that runs grocery, clothing, toy and book stores across the city.
 
-This is the **first playable prototype**: a single self-contained web page with no server. Open `index.html` in any modern browser to play.
+This is the **first playable prototype**: a single self-contained web page with no server. It's designed for phones first, with a bottom tab bar for the store floor, stockroom, checkout and ordering. It also works on a computer. Open `index.html` in any modern browser to play.
 
 ## Playing
 
 Your first grocery store starts **empty and closed** at 5 a.m. on day 1. The overview screen walks you through opening:
 
-1. **Choose products and order them by the box** from a supplier. Each product comes in boxes of a fixed size, such as 12 loaves or 6 gallons of milk.
+1. **Choose products and order them by the box** from a supplier, picking 1 to 20 boxes of each from a dropdown. Each product comes in boxes of a fixed size, such as 12 loaves or 6 gallons of milk.
 2. **Wait for the delivery truck**, or skip ahead until it arrives.
 3. **Check the delivery in.** Missing or damaged boxes are credited back, and the good boxes are left at the back door.
-4. **Unpack the boxes onto stockroom racks.** Each rack holds six boxes. Buy more racks as your range grows, or throw out boxes you don't need.
+4. **Unpack the boxes onto stockroom racks.** Each rack holds six boxes. Buy more racks as your range grows, or throw out boxes you don't need. Products never spoil.
 5. **Carry boxes out to the store floor**, two at a time or four with a stock trolley, and fill the shelves. Putting a new product in an empty space starts selling it.
 6. **Open the doors.** As customers buy, the shelves visibly empty, so keep fetching boxes and refilling. Serve customers at the register yourself until you hire a cashier.
 
@@ -28,7 +28,7 @@ Staff take jobs off your hands as you grow. Stockers keep the shelves filled, de
 - **Checkout:** customers form a line with their own baskets and stay in it until they're served, even after closing time. Each customer decides whether to pay by card or cash; for cash you enter what you were handed and the change is worked out. Cashiers you hire take over the registers.
 - **Customers:** each one has a type, a budget, tastes, price tolerance, loyalty, satisfaction and purchase history.
 - **Store floor:** every shelf space, showing how full it is, the price, how many boxes are in back, and how many customers wanted it today and found it empty. Fetch boxes and stock shelves from here.
-- **Stockroom:** the back door and racks. Unpack boxes, move them between rack spaces, carry them, combine part-full boxes, and throw out expired ones.
+- **Stockroom:** the back door and racks. Unpack boxes, move them between rack spaces, carry them, combine part-full boxes, and throw out boxes you don't want.
 - **Suppliers and orders:** compare suppliers, sign contracts, and order by the box. Orders are paid when placed and arrive hours later.
 - **Deliveries:** check in each delivery. Missing and damaged boxes are credited back. You can also refuse a delivery.
 - **Inventory list:** one table with shelf stock, stock still in boxes, what's on order, reorder points, and missed sales.
@@ -43,8 +43,8 @@ Staff take jobs off your hands as you grow. Stockers keep the shelves filled, de
 
 | | Grocery | Clothing | Toy | Book |
 |---|---|---|---|---|
-| Stock is tracked per | product, with use-by dates on every box | size × color | product | format (hardcover / paperback) |
-| Special rules | spoilage, fridge and freezer space, departments to unlock | fitting rooms, markdowns, returns, seasonal collections | age ranges, trending toys, December peak, gift wrap | genre loyalty, new releases, preorders, bestsellers |
+| Stock is tracked per | product | size × color | product | format (hardcover / paperback) |
+| Special rules | fridge and freezer space, departments to unlock | fitting rooms, markdowns, returns, seasonal collections | age ranges, trending toys, December peak, gift wrap | genre loyalty, new releases, preorders, bestsellers |
 
 ## Project layout
 

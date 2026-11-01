@@ -16,8 +16,9 @@ const shot = n => path.join(__dirname, n + '.png');
   await G(() => { window.__RE_UI.S.speed = 0; });
   // 1. order from the checklist
   await pg.click('.checklist [data-a=order]');
-  const inputs = await pg.$$('#modal input[data-c=oq]');
-  for (const i of inputs.slice(0, 14)) { await i.fill('2'); await i.dispatchEvent('input'); }
+  const sels = await pg.$$('#modal select[data-c=oq]');
+  for (const sel of sels.slice(0, 14)) await sel.selectOption('2');
+  if (!(await pg.textContent('#orderSum')).includes('28 boxes')) errs.push('order summary wrong: ' + await pg.textContent('#orderSum'));
   await pg.screenshot({ path: shot('1-order') });
   await pg.click('[data-a=orderPlace]');
   if (await G(() => window.__RE_UI.S.pos.length) !== 1) errs.push('order not placed');
@@ -63,6 +64,10 @@ const shot = n => path.join(__dirname, n + '.png');
   await G(() => { const S = window.__RE_UI.S, b = S.branches[0]; for (let i = 0; i < 240; i++) { RE.step(S); for (const id of [...b.queue]) { RE.serveStart(S, b.id, id); RE.completeSale(S, b.id, id, { given: b.cust[id].visit.tender }); } } });
   await nav('floor'); await pg.screenshot({ path: shot('6-floor-after-trading') });
   // 9. every screen renders
+  // phone: bottom tabs work
+  if (mobile) { await pg.click('#tabbar [data-v=stockroom]'); if (await G(() => window.__RE_UI.UI.view) !== 'stockroom') errs.push('tab bar'); await pg.click('#tabbar [data-a=menu]'); await pg.click('#side [data-v=hq]'); if (await G(() => window.__RE_UI.UI.view) !== 'hq') errs.push('more menu'); }
+  // spoiling is gone: jump 10 days, nothing should be thrown away
+  { const sp = await G(() => { const S = window.__RE_UI.S, b = S.branches[0]; b.status = 'closed'; for (let i = 0; i < 1440 * 10; i++) RE.step(S); b.status = 'open'; return RE.sumStats(S, 1, RE.dayOf(S.t)).spoil; }); if (sp) errs.push('spoilage happened: ' + sp); }
   for (const v of ['hq','branches','expansion','finance','goals','admin','overview','floor','stockroom','checkout','inventory','products','suppliers','deliveries','customers','employees','equipment','marketing'])
     { await nav(v); if (!(await pg.textContent('main h1'))) errs.push('blank ' + v); if (await pg.$('main .card h2:text("Something went wrong")')) errs.push('crash ' + v); }
   // 10. a second store via the wizard (fully stocked option)
