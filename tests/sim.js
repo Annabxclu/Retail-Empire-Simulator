@@ -2,6 +2,7 @@ require(require('path').join(__dirname, '..', 'src', 'engine.js'));
 const R = globalThis.RE;
 function run(days, botLevel){
   const S = R.newGame({company:'Test', cash:R.C(6000)});
+  { const bb=S.branches[0]; for(const p of R.TYPES.grocery.catalog) R.setListed(S,bb,p.id,true); }
   const b = S.branches[0];
   let lastDay=0;
   for(let i=0;i<days*1440;i++){
@@ -10,8 +11,8 @@ function run(days, botLevel){
     if(botLevel>0){
       // bot: serve queue every 3 min (simulating a player), fill shelves every 30 min
       if(m%3===0){ for(const bb of S.branches){ const id=bb.queue.find(id=>bb.cust[id].visit.phase==='queue'); if(id){ R.serveStart(S,bb.id,id); const c=bb.cust[id]; const r=R.completeSale(S,bb.id,id,{given:c.visit.tender,wrap:true,manual:true}); if(!r.ok) console.log('ERR',r.err);} } }
-      if(m%30===0) for(const bb of S.branches) R.fillAll(S,bb);
-      if(m===360||m===780){ if(S.t<1440) for(const it of Object.values(b.items)){it.min=18;it.reorder=26;} for(const bb of S.branches){ for(const sid of bb.sups){ const sug=R.reorderSuggestion(S,bb,sid); if(sug.length){ const r=R.placeOrder(S,bb.id,sid,sug); if(!r.ok && !/Minimum/.test(r.err)) console.log('PO',r.err.slice(0,90));} } } }
+      if(m%30===0) for(const bb of S.branches) { R.putAwayAll(S,bb); R.fillAll(S,bb); if(bb.setup) R.openStore(S,bb.id); }
+      if(m===300||m===360||m===780){ if(S.t<1440) for(const it of Object.values(b.items)){it.min=18;it.reorder=26;} for(const bb of S.branches){ for(const sid of bb.sups){ const sug=R.reorderSuggestion(S,bb,sid); if(sug.length){ const r=R.placeOrder(S,bb.id,sid,sug); if(!r.ok && !/Minimum/.test(r.err)) console.log('PO',r.err.slice(0,90));} } } }
       if(m%20===0) for(const po of S.pos) if(po.status==='arrived') { const r=R.acceptDelivery(S,po.id); if(!r.ok && !po._l){po._l=1;console.log('ACC',r.err);} }
     }
     const iss=R.audit(S); if(iss.length){console.log('AUDIT',iss);process.exit(1);}

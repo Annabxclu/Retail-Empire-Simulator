@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const R = window.RE, M = R.money, C = R.C;
-const SAVE_KEY = 're_save_v1', LOCK_KEY = 're_lock_v1';
+const SAVE_KEY = 're_save_v2', LOCK_KEY = 're_lock_v1';
 const TAB = Math.random().toString(36).slice(2);
 let S = null;
 const UI = { view: 'hq', bid: null, modal: null, nav: false, invTab: 'all', invQ: '', invCat: '', prodCat: '', custQ: '', custF: 'all', finRange: 'today', finB: '', ledB: '', order: null, wiz: null, confirm: null, locked: false, lastSave: 0, dirty: false, saveErr: '' };
@@ -40,7 +40,7 @@ function save() {
   catch (e) { UI.saveErr = 'Autosave failed: browser storage is unavailable or full. Use Settings & save to copy a save code.'; }
 }
 function load() {
-  try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return null; const o = JSON.parse(raw); if (o && o.v === 1 && o.branches) return o; } catch (e) {}
+  try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return null; const o = JSON.parse(raw); if (o && o.v === 2 && o.branches) return o; } catch (e) {}
   return null;
 }
 function attach(st) { S = st; S.onNote = n => { if (n.level === 'warn' || n.level === 'good' || /arrived/.test(n.text)) toast(n.text, n.level); }; UI.bid = S.branches[0].id; }
@@ -99,13 +99,14 @@ function renderTop() {
   $('skipBtn').style.display = R.isNight(S) && !anyQueue() ? '' : 'none';
 }
 const NAV_CO = [['hq','Headquarters'],['branches','Branches'],['expansion','Expansion'],['finance','Finances & reports'],['goals','Goals'],['admin','Settings & save']];
-const NAV_BR = [['overview','Store overview'],['checkout','Checkout'],['inventory','Inventory & stockroom'],['products','Products & pricing'],['suppliers','Suppliers & ordering'],['deliveries','Deliveries & orders'],['customers','Customers'],['employees','Employees'],['equipment','Equipment & upgrades'],['marketing','Marketing']];
+const NAV_BR = [['overview','Store overview'],['floor','Store floor'],['stockroom','Stockroom'],['checkout','Checkout'],['inventory','Inventory list'],['products','Products & pricing'],['suppliers','Suppliers & ordering'],['deliveries','Deliveries & orders'],['customers','Customers'],['employees','Employees'],['equipment','Equipment & upgrades'],['marketing','Marketing']];
 function renderNav() {
   if (!S) return;
   const b = B();
   const q = b.queue.filter(id => b.cust[id].visit && b.cust[id].visit.phase === 'queue').length;
   const arr = S.pos.filter(p => p.bid === b.id && p.status === 'arrived').length;
-  const badge = { checkout: q, deliveries: arr };
+  const empt = Object.values(b.items).filter(it => b.listed[it.pid] && R.itShelf(it) === 0).length;
+  const badge = { checkout: q, deliveries: arr, stockroom: R.atDock(b).length, floor: empt };
   let h = `<div class="grp">Company</div>`;
   for (const [v, l] of NAV_CO) h += `<button class="nv" data-a="nav" data-v="${v}" ${UI.view === v ? 'aria-current="page"' : ''}>${l}</button>`;
   h += `<div class="grp">Store</div><label class="sr" for="brSel" style="position:absolute;left:-9999px">Store</label><select id="brSel" data-c="pickBranch">${S.branches.map(x => `<option value="${x.id}" ${x.id === b.id ? 'selected' : ''}>${esc(x.name)} (${R.TYPES[x.type].short})</option>`).join('')}</select>`;
@@ -129,10 +130,13 @@ function alertsFor(b) {
   const arr = S.pos.filter(p => p.bid === b.id && p.status === 'arrived');
   if (arr.length) out.push(['warn', `${arr.length} deliver${arr.length > 1 ? 'ies' : 'y'} waiting to be checked in`, 'deliveries']);
   let empty = 0, low = 0, exp = 0;
-  for (const it of Object.values(b.items)) { if (!b.listed[it.pid]) continue; const sh = R.itShelf(it), sk = R.itStock(it); if (sh === 0) empty++; if (sh + sk + R.onOrder(S, b, it.sku) < it.min) low++; for (const x of it.batches) if (x.exp != null && x.exp <= day() && x.s + x.r) exp += x.s + x.r; }
-  if (empty) out.push(['bad', `${empty} stock line${empty > 1 ? 's' : ''} with an empty shelf`, 'inventory']);
+  if (b.setup) out.push(['warn', `${b.name} hasn't opened yet. Follow the opening checklist`, 'overview']);
+  const dk = R.atDock(b).length; if (dk) out.push(['warn', `${dk} box${dk > 1 ? 'es' : ''} at the back door waiting to be unpacked`, 'stockroom']);
+  const xb = b.cases.filter(c => R.caseExpired(S, c)).length; if (xb) out.push(['bad', `${xb} expired box${xb > 1 ? 'es' : ''} in the stockroom. Throw them out`, 'stockroom']);
+  for (const it of Object.values(b.items)) { if (!b.listed[it.pid]) continue; const sh = R.itShelf(it), sk = R.itStock(b, it); if (sh === 0) empty++; if (sh + sk + R.onOrder(S, b, it.sku) < it.min) low++; for (const x of it.batches) if (x.exp != null && x.exp <= day() && x.s) exp += x.s; }
+  if (empty) out.push(['bad', `${empty} empty shelf space${empty > 1 ? 's' : ''} on the store floor`, 'floor']);
   if (low) out.push(['warn', `${low} stock line${low > 1 ? 's' : ''} below the reorder point`, 'suppliers']);
-  if (exp) out.push(['warn', `${exp} units expire tonight. Lower prices or accept the loss`, 'inventory']);
+  if (exp) out.push(['warn', `${exp} units on the shelves expire tonight. Lower prices or accept the loss`, 'floor']);
   if (b.clean < 60) out.push(['warn', `Store cleanliness is ${Math.round(b.clean)}%. Customers notice`, 'overview']);
   if (S.cash < 0) out.push(['bad', 'Company cash is negative. Cut costs or sell stock quickly', 'finance']);
   return out;
@@ -166,7 +170,7 @@ V.branches = () => {
     return `<div class="card typecard" style="--c:var(--${b.type})"><div class="row" style="justify-content:space-between">${tchip(b.type)}<span class="pill ${b.status === 'open' ? 'good' : 'warn'}">${b.status === 'open' ? 'Operating' : 'Closed'}</span></div>
     <h2 class="mt8">${esc(b.name)}</h2><div class="small muted">${esc(R.LOCS[b.loc].name)} · ${R.SIZES[b.size].label} · opened day ${b.opened}</div><div class="mt8">${stars(b.rep)}</div>
     <div class="li small"><span>Revenue today</span><b class="num">${M(s.rev - s.refunds)}</b></div><div class="li small"><span>Net profit, last 7 days</span><b class="num ${w.net < 0 ? 'negc' : ''}">${M(w.net)}</b></div>
-    <div class="li small"><span>Staff</span><b class="num">${b.emps.length}</b></div><div class="li small"><span>Stockroom</span><b class="num">${R.stockUsed(b)} / ${R.stockCap(b)}</b></div><div class="li small"><span>Display space used</span><b class="num">${Object.keys(f).map(k => fu[k] + '/' + f[k]).join(' · ')}</b></div>
+    <div class="li small"><span>Staff</span><b class="num">${b.emps.length}</b></div><div class="li small"><span>Rack spaces used</span><b class="num">${R.stockUsed(b)} / ${R.stockCap(b)}</b></div><div class="li small"><span>Display space used</span><b class="num">${Object.keys(f).map(k => fu[k] + '/' + f[k]).join(' · ')}</b></div>
     <div class="li small"><span>Rent per day</span><b class="num">${M(R.rentOf(b))}</b></div>
     <div class="row mt8"><button class="btn pri" data-a="go" data-b="${b.id}" data-v="overview">Manage</button><button class="btn" data-a="go" data-b="${b.id}" data-v="checkout">Checkout</button></div></div>`; }).join('')}</div>`;
 };
@@ -252,13 +256,24 @@ V.overview = () => {
   const sat = s.satN ? Math.round(s.satSum / s.satN) : null;
   const rate = R.arrivalRate(S, b);
   const al = alertsFor(b);
-  return header(esc(b.name), `${TT.label} · ${R.LOCS[b.loc].name} · ${R.SIZES[b.size].label}. ${TT.desc}`, `<button class="btn" data-a="ask" data-q="${b.status === 'open' ? 'Close this store temporarily? Customers inside will leave, and staff stop working. Rent is still charged.' : 'Reopen this store?'}" data-do="toggleStatus">${b.status === 'open' ? 'Close temporarily' : 'Reopen store'}</button><button class="btn" data-a="renameB">Rename</button>${S.branches.length > 1 ? `<button class="btn bad" data-a="ask" data-q="Sell ${esc(b.name)} for about ${M(R.sellValue(S, b))}? Orders on the way are cancelled. This cannot be undone." data-do="sellB">Sell store</button>` : ''}`) +
+  const mine = S.pos.filter(p => p.bid === b.id);
+  const steps = [
+    ['Choose products and place your first order', mine.length > 0, mine.length ? '' : `<button class="btn sm pri" data-a="order" data-s="${b.sups[0]}">Order stock</button>`],
+    ['Wait for the delivery truck', mine.some(p => p.status !== 'transit'), (() => { const po = mine.filter(p => p.status === 'transit').sort((x, y) => x.eta - y.eta)[0]; return po && !mine.some(p => p.status !== 'transit') ? `<span class="small muted">due about ${R.fmtTime(po.eta)}</span><button class="btn sm" data-a="waitDelivery">Skip ahead until it arrives</button>` : ''; })()],
+    ['Check the delivery in at the back door', mine.some(p => p.status === 'closed'), mine.some(p => p.status === 'arrived') ? '<button class="btn sm pri" data-a="nav" data-v="deliveries">Check it in</button>' : ''],
+    ['Unpack the boxes onto stockroom racks', R.stockUsed(b) > 0 || Object.values(b.items).some(i => R.itShelf(i) > 0), R.atDock(b).length ? '<button class="btn sm pri" data-a="nav" data-v="stockroom">Go to stockroom</button>' : ''],
+    ['Carry boxes out and fill the shelves', Object.values(b.items).filter(i => b.listed[i.pid] && R.itShelf(i) > 0).length >= 5, b.cases.length ? '<button class="btn sm pri" data-a="nav" data-v="floor">Go to store floor</button>' : ''],
+    ['Open the doors', false, Object.values(b.items).some(i => R.itShelf(i) > 0) ? '<button class="btn sm pri" data-a="openStore">Open the store</button>' : '']
+  ];
+  const nextI = steps.findIndex(x => !x[1]);
+  const checklist = b.setup ? `<div class="card checklist"><h2>Get ${esc(b.name)} ready to open</h2><p class="small muted" style="margin-top:0">The store is closed and empty. Customers start coming once you open, from 08:00 to 21:00.</p>${steps.map((x, i) => `<div class="li ${i === nextI ? 'cur' : ''}"><span>${x[1] ? '✓' : i + 1 + '.'} ${x[0]}</span><span class="row">${i === nextI || (i === steps.length - 1 && x[2]) ? x[2] : ''}</span></div>`).join('')}</div>` : '';
+  return checklist + header(esc(b.name), `${TT.label} · ${R.LOCS[b.loc].name} · ${R.SIZES[b.size].label}. ${TT.desc}`, `<button class="btn" data-a="ask" data-q="${b.setup ? 'Open the doors now?' : b.status === 'open' ? 'Close this store temporarily? Customers inside will leave, and staff stop working. Rent is still charged.' : 'Reopen this store?'}" data-do="toggleStatus">${b.status === 'open' ? 'Close temporarily' : b.setup ? 'Open the store' : 'Reopen store'}</button><button class="btn" data-a="renameB">Rename</button>${S.branches.length > 1 ? `<button class="btn bad" data-a="ask" data-q="Sell ${esc(b.name)} for about ${M(R.sellValue(S, b))}? Orders on the way are cancelled. This cannot be undone." data-do="sellB">Sell store</button>` : ''}`) +
   `<div class="grid g4">${tile('Revenue today', M(s.rev - s.refunds), `${s.served} sales · ${s.lost} left without buying`)}${tile('Net profit today', M(s.net), `7 days: ${K(w.net)}`, s.net < 0 ? 'negc' : 'pos')}${tile('In store now', inStore, `${q} at checkout · ~${rate.toFixed(0)} arrivals/hour`)}${tile('Rating', stars(b.rep), sat != null ? `Today's visits: ${sat}/100 satisfied` : 'No visits yet today')}</div>
   <div class="grid g2 mt"><div class="stack">
    <div class="card"><h2>Needs attention</h2>${al.length ? `<div class="stack" style="gap:6px">${al.map(a => `<div class="alert ${a[0]}"><div style="flex:1">${esc(a[1])}</div><button class="btn sm" data-a="nav" data-v="${a[2]}">Open</button></div>`).join('')}</div>` : '<div class="empty">All good here.</div>'}</div>
    <div class="card"><h2>Store condition</h2><div class="li"><span>Cleanliness</span><span class="row" style="flex:1;justify-content:flex-end">${meter(b.clean, 100, b.clean < 60 ? 'bad' : b.clean < 75 ? 'warn' : 'good')}<b class="num">${Math.round(b.clean)}%</b><button class="btn sm" data-a="tidy">Tidy up</button></span></div>
     ${Object.keys(f).map(k => `<div class="li"><span>${TT.facings[k]}</span><span class="row">${meter(fu[k], f[k])}<b class="num">${fu[k]} / ${f[k]}</b></span></div>`).join('')}
-    <div class="li"><span>Stockroom</span><span class="row">${meter(R.stockUsed(b), R.stockCap(b), R.stockUsed(b) / R.stockCap(b) > 0.9 ? 'warn' : '')}<b class="num">${R.stockUsed(b)} / ${R.stockCap(b)}</b></span></div>
+    <div class="li"><span>Stockroom racks</span><span class="row">${meter(R.stockUsed(b), R.stockCap(b), R.stockUsed(b) / R.stockCap(b) > 0.9 ? 'warn' : '')}<b class="num">${R.stockUsed(b)} / ${R.stockCap(b)}</b></span></div><div class="li"><span>Boxes at the back door</span><b class="num">${R.atDock(b).length}</b></div>
     <div class="li"><span>Checkout registers</span><b class="num">${b.equip.register}</b></div><div class="li"><span>Daily rent + utilities</span><b class="num">${M(R.rentOf(b) + R.utilOf(b) + R.maintOf(b))}</b></div></div>
   </div><div class="stack">${specialPanel(b)}
    <div class="card"><h2>Recent activity</h2>${S.notes.filter(n => n.b === b.id).slice(0, 6).map(n => `<div class="li small"><span>${esc(n.text)}</span><span class="muted num" style="white-space:nowrap">${R.fmtTime(n.t)}</span></div>`).join('') || '<div class="empty">Nothing yet.</div>'}</div>
@@ -270,7 +285,7 @@ function specialPanel(b) {
     const exp = []; for (const it of Object.values(b.items)) for (const x of it.batches) if (x.exp != null && x.exp <= d + 1 && x.s + x.r) exp.push({ it, x });
     exp.sort((a, c) => a.x.exp - c.x.exp);
     const locked = TT.upgrades.filter(u => !b.upg.includes(u.id));
-    return `<div class="card"><h2>Fresh food</h2><p class="small muted" style="margin-top:0">Expired stock is thrown out at midnight and counted as spoilage.</p>${exp.length ? exp.slice(0, 7).map(({ it, x }) => `<div class="li small"><span>${esc(R.itemName(b, it))}</span><span class="row"><span class="num">${x.s + x.r} units</span><span class="pill ${x.exp <= d ? 'bad' : 'warn'}">${x.exp <= d ? 'Expires tonight' : 'Expires tomorrow'}</span></span></div>`).join('') : '<div class="empty">Nothing expires in the next two days.</div>'}
+    return `<div class="card"><h2>Fresh food</h2><p class="small muted" style="margin-top:0">Expired stock is pulled off the shelves at midnight and counted as spoilage. Expired boxes stay in the stockroom, taking up space, until you throw them out.</p>${exp.length ? exp.slice(0, 7).map(({ it, x }) => `<div class="li small"><span>${esc(R.itemName(b, it))}</span><span class="row"><span class="num">${x.s + x.r} units</span><span class="pill ${x.exp <= d ? 'bad' : 'warn'}">${x.exp <= d ? 'Expires tonight' : 'Expires tomorrow'}</span></span></div>`).join('') : '<div class="empty">Nothing expires in the next two days.</div>'}
     <h3 class="mt">Departments</h3><div class="row">${b.depts.map(x => `<span class="pill good">${esc(x)}</span>`).join('')}${locked.map(u => `<span class="pill">${esc(u.name)}: locked</span>`).join('')}</div></div>`;
   }
   if (b.type === 'clothing') {
@@ -304,28 +319,94 @@ V.checkout = () => {
    <div class="card"><h2>Shopping now <span class="num muted">(${browsing.length})</span></h2>${browsing.length ? browsing.slice(0, 12).map(c => `<div class="li small"><span>${esc(c.name)} <span class="muted">${esc(R.typeLabel(b, c))}</span></span><span class="pill">${{ browsing: 'Browsing', fitting: 'In fitting room', fitwait: 'Waiting for a fitting room' }[c.visit.phase]}</span></div>`).join('') : '<div class="empty">The aisles are quiet.</div>'}</div></div></div>`;
 };
 
+/* ---- stock: shared bits ---- */
+function boxName(b, c) { const it = b.items[c.sku]; return R.itemName(b, it); }
+function boxExp(c) { if (c.exp == null) return ''; const d = day(); return c.exp < d ? '<span class="pill bad">Expired</span>' : c.exp === d ? '<span class="pill warn">Use today</span>' : `<span class="small muted">use by day ${c.exp}</span>`; }
+function handsBar(b, where) {
+  const h = R.inHands(b), cap = R.handsCap(b);
+  return `<div class="hands"><div class="row" style="justify-content:space-between"><b>In your hands</b><span class="small muted num">${h.length} / ${cap} boxes</span></div>
+  ${h.length ? `<div class="hlist">${h.map(c => `<div class="hbox ${UI.sel === c.id ? 'sel' : ''}"><div><div class="nm">${esc(boxName(b, c))}</div><div class="small muted"><span class="num">${c.q}</span> units ${boxExp(c)}</div></div><div class="row" style="gap:6px">${where === 'floor' ? `<button class="btn sm pri" data-a="stockBox" data-id="${c.id}">Stock shelf</button>` : `<button class="btn sm ${UI.sel === c.id ? 'pri' : ''}" data-a="selBox" data-id="${c.id}">${UI.sel === c.id ? 'Tap an empty space' : 'Put on a rack'}</button>`}<button class="btn sm" data-a="putBack" data-id="${c.id}">${where === 'floor' ? 'Put back' : 'Next free space'}</button></div></div>`).join('')}</div>`
+  : `<div class="small muted">${where === 'floor' ? 'Empty. Tap "Fetch a box" on a shelf, or pick boxes up in the Stockroom.' : 'Empty. Tap a box, then "Carry".'}</div>`}</div>`;
+}
+
+/* ---- store floor: the aisles customers shop ---- */
+V.floor = () => {
+  const b = B(), TT = T(b), f = R.facings(b);
+  const carrying = R.inHands(b);
+  const carryPids = new Set(carrying.map(c => b.items[c.sku].pid));
+  const backOf = pid => b.cases.filter(c => b.items[c.sku].pid === pid && c.loc !== 'hands' && !R.caseExpired(S, c));
+  const tile = pid => {
+    const p = TT.pmap[pid], its = Object.values(b.items).filter(i => i.pid === pid), mx = R.shelfMaxOf(b, p);
+    const sh = its.reduce((a, i) => a + R.itShelf(i), 0), cap = mx * its.length, ratio = sh / cap;
+    const emptyV = its.filter(i => R.itShelf(i) === 0);
+    const cls = sh === 0 ? 'empty' : ratio < 0.3 ? 'low' : '';
+    const back = backOf(pid).length;
+    const missed = its.reduce((a, i) => a + i.missT, 0);
+    const holding = carrying.find(c => b.items[c.sku].pid === pid);
+    const variants = its.length > 1 ? `<div class="vgrid">${its.map(i => `<span class="v ${R.itShelf(i) === 0 ? 'out' : ''}" title="${esc(i.label)}">${esc(i.size || i.label)}${i.color && p.colors.length > 1 ? ' ' + esc(i.color[0]) : ''} <b class="num">${R.itShelf(i)}</b></span>`).join('')}</div>` : '';
+    return `<div class="facing ${cls}"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:6px"><div class="nm">${esc(p.name)}</div><span class="pricetag">${M(R.effPrice(S, b, its[0]))}</span></div>
+      <div class="fill" aria-label="${sh} of ${cap} on the shelf"><i style="height:${Math.round(ratio * 100)}%"></i></div>
+      <div class="small"><b class="num">${sh}</b><span class="muted"> / ${cap} on shelf${its.length > 1 && emptyV.length ? ` · ${emptyV.length} ${b.type === 'book' ? 'format' : 'size'}${emptyV.length > 1 ? 's' : ''} out` : ''}</span></div>${variants}
+      <div class="small muted">${back} box${back === 1 ? '' : 'es'} in back${missed ? ` · <span class="negc">${missed} wanted it today</span>` : ''}</div>
+      ${holding && ratio < 1 ? `<button class="btn pri sm" data-a="stockBox" data-id="${holding.id}">Stock from box (${holding.q})</button>` : back ? `<button class="btn sm" data-a="fetch" data-p="${pid}" ${ratio >= 1 ? 'disabled' : ''}>${ratio >= 1 ? 'Full' : 'Fetch a box'}</button>` : `<button class="btn sm" data-a="nav" data-v="suppliers">Order more</button>`}</div>`;
+  };
+  const newHere = fk => carrying.filter(c => { const p = TT.pmap[b.items[c.sku].pid]; return !b.listed[p.id] && TT.facingOf(p) === fk && b.depts.includes(p.cat); });
+  const sections = Object.keys(f).map(fk => {
+    const pids = (b.lorder || []).filter(pid => b.listed[pid] && TT.facingOf(TT.pmap[pid]) === fk);
+    const free = f[fk] - pids.length, cand = newHere(fk);
+    return `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${TT.facings[fk]}</h2><span class="small muted num">${pids.length} / ${f[fk]} in use</span></div>
+      <div class="aisle mt8">${pids.map(tile).join('')}${Array.from({ length: Math.max(0, free) }, (_, i) => `<div class="facing open"><div class="small muted">Empty space</div>${i === 0 && cand.length ? cand.slice(0, 2).map(c => `<button class="btn sm pri" data-a="stockBox" data-id="${c.id}">Put ${esc(TT.pmap[b.items[c.sku].pid].name)} here</button>`).join('') : `<div class="small muted">${i === 0 ? 'Carry in a box of a new product to start selling it here.' : ''}</div>`}</div>`).join('')}</div></div>`;
+  }).join('');
+  const stocker = b.emps.some(e => e.role === 'stocker');
+  return header('Store floor', `What customers see. Shelves empty as they buy; refill them with boxes from the stockroom. ${b.status === 'open' ? `${b.active.length} customer${b.active.length === 1 ? '' : 's'} in the store.` : '<b>The store is closed.</b>'}`,
+    `<button class="btn" data-a="nav" data-v="stockroom">Go to stockroom</button>${stocker ? '<button class="btn" data-a="fillAll">Ask stocker to restock all</button>' : ''}`) +
+    handsBar(b, 'floor') + `<div class="stack mt">${sections}</div>`;
+};
+
+/* ---- stockroom: back door + racks ---- */
+V.stockroom = () => {
+  const b = B(), TT = T(b), dock = R.atDock(b), used = R.stockUsed(b), cap = R.stockCap(b);
+  const sel = UI.sel != null ? R.caseOf(b, UI.sel) : null; if (UI.sel != null && !sel) UI.sel = null;
+  const occ = {}; for (const c of b.cases) if (c.loc[0] === 'S') occ[c.loc] = c;
+  const expired = b.cases.filter(c => R.caseExpired(S, c)).length;
+  const rackMax = R.SIZES[b.size].racks, rackCost = TT.equip.find(e => e.id === 'storage').cost;
+  const boxCard = (c, inRack) => { const it = b.items[c.sku], pack = R.packOf(b, it), ex = R.caseExpired(S, c);
+    return `<button class="box ${UI.sel === c.id ? 'sel' : ''} ${ex ? 'exp' : ''}" data-a="selBox" data-id="${c.id}" aria-pressed="${UI.sel === c.id}"><span class="bn">${esc(boxName(b, c))}</span><span class="small"><b class="num">${c.q}</b><span class="muted">/${pack}</span> ${boxExp(c)}</span></button>`; };
+  const actions = sel ? `<div class="selbar"><div><b>${esc(boxName(b, sel))}</b> <span class="small muted">${sel.q} units · ${sel.loc === 'dock' ? 'at the back door' : sel.loc === 'hands' ? 'in your hands' : 'on rack ' + (+sel.loc.slice(1).split('-')[0] + 1)}</span></div>
+    <div class="row">${sel.loc !== 'hands' ? `<button class="btn sm pri" data-a="carry" data-id="${sel.id}" ${R.caseExpired(S, sel) ? 'disabled' : ''}>Carry</button>` : ''}<span class="small muted">${sel.loc === 'dock' || sel.loc === 'hands' ? 'or tap an empty rack space to put it there' : 'or tap an empty space to move it'}</span>
+    <button class="btn sm bad" data-a="ask" data-q="Throw out this box of ${esc(boxName(b, sel))}? Its ${sel.q} units are written off as waste (${M(sel.q * sel.c)})." data-do="discard" data-e="${sel.id}">Throw out</button><button class="btn sm" data-a="selBox" data-id="${sel.id}">Cancel</button></div></div>` : '';
+  const racks = Array.from({ length: b.equip.storage || 0 }, (_, r) => `<div class="rack"><div class="rl small muted">Rack ${r + 1}</div><div class="slots">${Array.from({ length: R.SLOTS }, (_, k) => { const id = `S${r}-${k}`, c = occ[id]; return c ? boxCard(c, true) : `<button class="slot ${sel && sel.loc !== id ? 'target' : ''}" data-a="slot" data-l="${id}" aria-label="Empty space, rack ${r + 1}">${sel ? 'Put here' : ''}</button>`; }).join('')}</div></div>`).join('');
+  const receiver = b.emps.some(e => e.role === 'receiver');
+  return header('Stockroom', `Boxes arrive at the back door. Unpack them onto the racks, then carry them out to the shelves. Racks: ${used} of ${cap} spaces used.`,
+    `<button class="btn" data-a="buyEq" data-e="storage" ${(b.equip.storage || 0) >= rackMax ? 'disabled' : ''}>${(b.equip.storage || 0) >= rackMax ? 'No room for more racks' : `Buy a rack (+6) ${M(rackCost)}`}</button><button class="btn" data-a="combine">Combine part-full boxes</button><button class="btn" data-a="nav" data-v="floor">Go to store floor</button>`) +
+  handsBar(b, 'stockroom') + actions +
+  `<div class="card mt"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Back door <span class="num muted">(${dock.length})</span></h2>${dock.length ? `<div class="row">${receiver ? '<button class="btn sm" data-a="unpackAll">Unpack everything</button>' : ''}</div>` : ''}</div>
+   ${dock.length ? `<div class="dock mt8">${dock.map(c => `<div class="dbox">${boxCard(c)}<div class="row" style="gap:4px"><button class="btn sm" data-a="unpack" data-id="${c.id}">Unpack</button><button class="btn sm" data-a="carry" data-id="${c.id}">Carry</button></div></div>`).join('')}</div>` : `<div class="empty">Nothing at the back door.${S.pos.some(p => p.bid === b.id && p.status === 'arrived') ? ' A delivery is waiting to be checked in. <button class="btn sm" data-a="nav" data-v="deliveries">Check it in</button>' : ''}</div>`}</div>
+  <div class="card mt"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Racks</h2><span class="row small">${meter(used, cap, used / cap > 0.85 ? 'warn' : '')}<span class="num">${used}/${cap}</span>${expired ? `<span class="pill bad">${expired} expired</span>` : ''}</span></div><div class="racks mt8">${racks || '<div class="empty">No racks yet. Buy one above.</div>'}</div></div>`;
+};
+
+/* ---- inventory list (overview table) ---- */
 function invRows(b) {
   const TT = T(b); const q = UI.invQ.toLowerCase();
   let items = Object.values(b.items).filter(it => { const p = TT.pmap[it.pid]; return (UI.invCat ? p.cat === UI.invCat : true) && (!q || (p.name + ' ' + it.label + ' ' + (p.author || '')).toLowerCase().includes(q)); });
   const tab = UI.invTab;
-  if (tab === 'all') items = items.filter(it => b.listed[it.pid] || R.itStock(it) > 0);
+  if (tab === 'all') items = items.filter(it => b.listed[it.pid] || R.itStock(b, it) > 0);
   if (tab === 'empty') items = items.filter(it => b.listed[it.pid] && R.itShelf(it) === 0);
-  if (tab === 'low') items = items.filter(it => b.listed[it.pid] && R.itShelf(it) + R.itStock(it) + R.onOrder(S, b, it.sku) < it.min);
-  if (tab === 'stockroom') items = items.filter(it => R.itStock(it) > 0);
-  if (tab === 'expiring') items = items.filter(it => it.batches.some(x => x.exp != null && x.exp <= day() + 1 && x.s + x.r));
+  if (tab === 'low') items = items.filter(it => b.listed[it.pid] && R.itShelf(it) + R.itStock(b, it) + R.onOrder(S, b, it.sku) < it.min);
+  if (tab === 'stockroom') items = items.filter(it => R.itStock(b, it) > 0);
+  if (tab === 'expiring') items = items.filter(it => it.batches.some(x => x.exp != null && x.exp <= day() + 1 && x.s) || b.cases.some(c => c.sku === it.sku && c.exp != null && c.exp <= day() + 1));
   return items;
 }
 V.inventory = () => {
   const b = B(), TT = T(b);
   const items = invRows(b);
-  const tabs = [['all', 'On display'], ['empty', 'Empty shelves'], ['low', 'Below reorder point'], ['stockroom', 'In stockroom']]; if (b.type === 'grocery') tabs.push(['expiring', 'Expiring']);
-  return header('Inventory & stockroom', `Shelf quantities are what customers can buy. Stock sits in the stockroom until you or a stocker moves it out. Stockroom: ${R.stockUsed(b)} of ${R.stockCap(b)} units.`, `<button class="btn pri" data-a="fillAll">Restock all shelves</button>`) +
+  const tabs = [['all', 'On display'], ['empty', 'Empty shelves'], ['low', 'Below reorder point'], ['stockroom', 'In boxes']]; if (b.type === 'grocery') tabs.push(['expiring', 'Expiring']);
+  return header('Inventory list', 'Every product in one table: what is on the shelves, what is still in boxes, and what is on order. Restock on the Store floor.', `<button class="btn pri" data-a="nav" data-v="floor">Go to store floor</button>`) +
   `<div class="row" style="margin-bottom:10px"><div class="seg" role="group" aria-label="Filter">${tabs.map(([k, l]) => `<button data-a="invTab" data-k="${k}" aria-pressed="${UI.invTab === k}">${l}</button>`).join('')}</div><input type="text" id="invQ" data-c="invQ" placeholder="Search products" value="${esc(UI.invQ)}" aria-label="Search products"><select data-c="invCat" aria-label="Category"><option value="">All categories</option>${TT.cats.map(c => `<option ${UI.invCat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
-  <div class="tw"><table><thead><tr><th>Product</th><th class="n">Shelf</th><th class="n">Stockroom</th><th class="n">On order</th><th class="n">Cost</th><th class="n">Price</th><th class="n">Margin</th><th class="n">Sold today</th><th class="n">Missed</th><th class="n">Reorder at</th><th class="n">Reorder qty</th><th></th></tr></thead><tbody>${items.slice(0, 300).map(it => { const p = TT.pmap[it.pid]; const sh = R.itShelf(it), sk = R.itStock(it), mx = R.shelfMaxOf(b, p), cost = R.avgCost(b, it), pr = R.effPrice(S, b, it); const mg = pr ? Math.round((pr - cost) / pr * 100) : 0; const ex = it.batches.filter(x => x.exp != null && x.s + x.r).map(x => x.exp)[0];
-    return `<tr><td><div class="nm">${esc(p.name)}</div><div class="sb">${esc(it.label || p.cat)}${!b.listed[it.pid] ? ' · <b>not on display</b>' : ''}${ex != null ? ` · use by day ${ex}` : ''}</div></td><td class="n ${b.listed[it.pid] && sh === 0 ? 'negc' : ''}">${sh}/${mx}</td><td class="n">${sk}</td><td class="n">${R.onOrder(S, b, it.sku) || ''}</td><td class="n">${M(cost)}</td><td class="n">${M(pr)}</td><td class="n ${mg < 15 ? 'negc' : ''}">${mg}%</td><td class="n">${it.soldT}</td><td class="n ${it.missT ? 'negc' : ''}">${it.missT || ''}</td>
-    <td class="n"><input class="qty" type="number" min="0" max="999" value="${it.min}" data-c="setMin" data-s="${esc(it.sku)}" aria-label="Reorder point"></td><td class="n"><input class="qty" type="number" min="1" max="999" value="${it.reorder}" data-c="setRe" data-s="${esc(it.sku)}" aria-label="Reorder quantity"></td>
-    <td><button class="btn sm" data-a="fill" data-s="${esc(it.sku)}" ${sk && b.listed[it.pid] && sh < mx ? '' : 'disabled'}>Fill shelf</button></td></tr>`; }).join('') || `<tr><td colspan="12"><div class="empty">Nothing matches.</div></td></tr>`}</tbody></table></div>
-  ${items.length > 300 ? `<p class="small muted">Showing 300 of ${items.length}. Narrow the search.</p>` : ''}<p class="small muted">"Missed" counts customers who wanted the item today and found the shelf empty. "Reorder at" and "Reorder qty" drive suggested orders and the store manager.</p>`;
+  <div class="tw"><table><thead><tr><th>Product</th><th class="n">Shelf</th><th class="n">In boxes</th><th class="n">On order</th><th class="n">Box</th><th class="n">Cost</th><th class="n">Price</th><th class="n">Margin</th><th class="n">Sold today</th><th class="n">Missed</th><th class="n">Reorder at</th><th class="n">Reorder qty</th></tr></thead><tbody>${items.slice(0, 300).map(it => { const p = TT.pmap[it.pid]; const sh = R.itShelf(it), sk = R.itStock(b, it), nb = b.cases.filter(c => c.sku === it.sku).length, mx = R.shelfMaxOf(b, p), cost = R.avgCost(b, it), pr = R.effPrice(S, b, it); const mg = pr ? Math.round((pr - cost) / pr * 100) : 0; const ex = it.batches.filter(x => x.exp != null && x.s).map(x => x.exp)[0];
+    return `<tr><td><div class="nm">${esc(p.name)}</div><div class="sb">${esc(it.label || p.cat)}${!b.listed[it.pid] ? ' · <b>not on display</b>' : ''}${ex != null ? ` · shelf use by day ${ex}` : ''}</div></td><td class="n ${b.listed[it.pid] && sh === 0 ? 'negc' : ''}">${sh}/${mx}</td><td class="n">${sk ? `${sk} <span class="muted">(${nb} box${nb === 1 ? '' : 'es'})</span>` : ''}</td><td class="n">${R.onOrder(S, b, it.sku) || ''}</td><td class="n">${R.packOf(b, it)}</td><td class="n">${M(cost)}</td><td class="n">${M(pr)}</td><td class="n ${mg < 15 ? 'negc' : ''}">${mg}%</td><td class="n">${it.soldT}</td><td class="n ${it.missT ? 'negc' : ''}">${it.missT || ''}</td>
+    <td class="n"><input class="qty" type="number" min="0" max="999" value="${it.min}" data-c="setMin" data-s="${esc(it.sku)}" aria-label="Reorder point"></td><td class="n"><input class="qty" type="number" min="1" max="999" value="${it.reorder}" data-c="setRe" data-s="${esc(it.sku)}" aria-label="Reorder quantity"></td></tr>`; }).join('') || `<tr><td colspan="12"><div class="empty">Nothing matches.</div></td></tr>`}</tbody></table></div>
+  ${items.length > 300 ? `<p class="small muted">Showing 300 of ${items.length}. Narrow the search.</p>` : ''}<p class="small muted">"Missed" counts customers who wanted the item today and found the shelf empty. "Reorder at" and "Reorder qty" (in units) drive suggested orders and the store manager.</p>`;
 };
 
 V.products = () => {
@@ -359,10 +440,10 @@ V.suppliers = () => {
 V.deliveries = () => {
   const b = B(); const mine = S.pos.filter(p => p.bid === b.id);
   const arr = mine.filter(p => p.status === 'arrived'), tr = mine.filter(p => p.status === 'transit'), done = mine.filter(p => p.status !== 'arrived' && p.status !== 'transit').slice(0, 40);
-  const sup = id => R.SUPPLIERS[id].name; const units = p => p.lines.reduce((a, l) => a + l.qty, 0);
-  return header('Deliveries & orders', 'Arrived deliveries wait at the back door until someone checks them in. Nothing goes into stock before that.', `<button class="btn" data-a="nav" data-v="suppliers">New order</button>`) +
-  `<div class="card"><h2>Waiting to be checked in <span class="num muted">(${arr.length})</span></h2>${arr.length ? arr.map(p => { const short = p.lines.some(l => l.delivered < l.qty || l.dmg); return `<div class="li"><span><b>${p.id}</b> · ${esc(sup(p.sup))}<br><span class="small muted">${units(p)} units ordered · arrived ${ago(p.arrivedAt)}</span></span><span class="row">${short ? '<span class="pill warn">Discrepancies</span>' : '<span class="pill good">Looks complete</span>'}<button class="btn pri" data-a="review" data-p="${p.id}">Review</button></span></div>`; }).join('') : '<div class="empty">Nothing at the back door.</div>'}</div>
-  <div class="card mt"><h2>On the way <span class="num muted">(${tr.length})</span></h2>${tr.length ? `<div class="tw"><table><thead><tr><th>Order</th><th>Supplier</th><th class="n">Units</th><th class="n">Paid</th><th>Expected</th><th></th></tr></thead><tbody>${tr.map(p => `<tr><td class="num">${p.id}${p.by === 'manager' ? ' <span class="pill">manager</span>' : ''}</td><td>${esc(sup(p.sup))}</td><td class="n">${units(p)}</td><td class="n">${M(p.total)}</td><td class="num small">Day ${R.dayOf(p.eta)} ${R.fmtTime(p.eta)} · in ${dur(Math.max(0, p.eta - S.t))}</td><td><button class="btn sm" data-a="poView" data-p="${p.id}">Details</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No open orders.</div>'}</div>
+  const sup = id => R.SUPPLIERS[id].name; const units = p => p.lines.reduce((a, l) => a + l.cases, 0);
+  return header('Deliveries & orders', 'Delivery trucks drop boxes at the back door. Check each delivery in, then unpack the boxes in the Stockroom.', `<button class="btn" data-a="nav" data-v="suppliers">New order</button>`) +
+  `<div class="card"><h2>Waiting to be checked in <span class="num muted">(${arr.length})</span></h2>${arr.length ? arr.map(p => { const short = p.lines.some(l => l.delivered < l.qty || l.dmg); return `<div class="li"><span><b>${p.id}</b> · ${esc(sup(p.sup))}<br><span class="small muted">${units(p)} boxes ordered · arrived ${ago(p.arrivedAt)}</span></span><span class="row">${short ? '<span class="pill warn">Discrepancies</span>' : '<span class="pill good">Looks complete</span>'}<button class="btn pri" data-a="review" data-p="${p.id}">Review</button></span></div>`; }).join('') : '<div class="empty">Nothing at the back door.</div>'}</div>
+  <div class="card mt"><div class="row" style="justify-content:space-between"><h2 style="margin:0">On the way <span class="num muted">(${tr.length})</span></h2>${tr.length && !b.active.length ? '<button class="btn sm" data-a="waitDelivery">Skip ahead until the next one arrives</button>' : ''}</div>${tr.length ? `<div class="tw"><table><thead><tr><th>Order</th><th>Supplier</th><th class="n">Boxes</th><th class="n">Paid</th><th>Expected</th><th></th></tr></thead><tbody>${tr.map(p => `<tr><td class="num">${p.id}${p.by === 'manager' ? ' <span class="pill">manager</span>' : ''}</td><td>${esc(sup(p.sup))}</td><td class="n">${units(p)}</td><td class="n">${M(p.total)}</td><td class="num small">Day ${R.dayOf(p.eta)} ${R.fmtTime(p.eta)} · in ${dur(Math.max(0, p.eta - S.t))}</td><td><button class="btn sm" data-a="poView" data-p="${p.id}">Details</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No open orders.</div>'}</div>
   <div class="card mt"><h2>History</h2>${done.length ? `<div class="tw"><table><thead><tr><th>Order</th><th>Supplier</th><th>Status</th><th class="n">Paid</th><th class="n">Credited</th><th>Closed</th><th></th></tr></thead><tbody>${done.map(p => `<tr><td class="num">${p.id}</td><td>${esc(sup(p.sup))}</td><td><span class="pill ${p.status === 'closed' ? 'good' : 'warn'}">${{ closed: 'Received', refused: 'Refused', cancelled: 'Cancelled' }[p.status]}</span>${p.acceptedBy && p.acceptedBy !== 'you' ? ` <span class="small muted">by ${esc(p.acceptedBy)}</span>` : ''}</td><td class="n">${M(p.total)}</td><td class="n">${p.credit ? M(p.credit) : ''}</td><td class="num small">${p.closedAt ? 'Day ' + R.dayOf(p.closedAt) + ' ' + R.fmtTime(p.closedAt) : ''}</td><td><button class="btn sm" data-a="poView" data-p="${p.id}">Details</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No completed orders yet.</div>'}</div>`;
 };
 
@@ -388,7 +469,7 @@ V.employees = () => {
 V.equipment = () => {
   const b = B(), TT = T(b);
   return header('Equipment & upgrades', 'More display space means more products on sale. Equipment adds daily upkeep and power costs.') +
-  `<div class="grid g3">${TT.equip.map(e => { const n = b.equip[e.id] || 0; return `<div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(e.name)}</h3><span class="pill">Owned ${n}${e.max < 20 ? ' / ' + e.max : ''}</span></div><p class="small muted">${esc(e.desc)}</p><div class="row"><button class="btn pri" data-a="buyEq" data-e="${e.id}" ${n >= e.max ? 'disabled' : ''}>${n >= e.max ? 'Maximum reached' : 'Buy for ' + M(e.cost)}</button></div></div>`; }).join('')}</div>
+  `<div class="grid g3">${TT.equip.map(e => { const n = b.equip[e.id] || 0; return `<div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(e.name)}</h3><span class="pill">Owned ${n}${e.id === 'storage' ? ' / ' + R.SIZES[b.size].racks : e.max < 20 ? ' / ' + e.max : ''}</span></div><p class="small muted">${esc(e.desc)}</p><div class="row">${(() => { const mx = e.id === 'storage' ? R.SIZES[b.size].racks : e.max; return `<button class="btn pri" data-a="buyEq" data-e="${e.id}" ${n >= mx ? 'disabled' : ''}>${n >= mx ? 'Maximum reached' : 'Buy for ' + M(e.cost)}</button>`; })()}</div></div>`; }).join('')}</div>
   ${TT.upgrades.length ? `<h2 class="mt">Departments</h2><div class="grid g3 mt8">${TT.upgrades.map(u => { const has = b.upg.includes(u.id), need = u.need(b); return `<div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(u.name)}</h3>${has ? '<span class="pill good">Open</span>' : ''}</div><p class="small muted">${esc(u.desc)}</p>${has ? '' : `<div class="row"><button class="btn pri" data-a="buyUp" data-u="${u.id}" ${need ? 'disabled' : ''}>Open for ${M(u.cost)}</button>${need ? `<span class="small muted">${need}</span>` : ''}</div>`}</div>`; }).join('')}</div>` : ''}`;
 };
 
@@ -425,30 +506,31 @@ MD.order = m => {
   const b = R.branchOf(S, m.bid), s = R.SUPPLIERS[m.sup], TT = T(b);
   const items = R.supItems(b, m.sup).filter(it => !m.cat || TT.pmap[it.pid].cat === m.cat).filter(it => !m.onlyListed || b.listed[it.pid]);
   const groups = {}; for (const it of items) (groups[it.pid] = groups[it.pid] || []).push(it);
-  const body = `<div class="row" style="margin-bottom:10px"><button class="btn" data-a="orderSuggest">Fill in suggested quantities</button><button class="btn" data-a="orderClear">Clear</button><select data-c="orderCat" aria-label="Category"><option value="">All categories</option>${[...new Set(R.supItems(b, m.sup).map(i => TT.pmap[i.pid].cat))].map(c => `<option ${m.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><label class="row small"><input type="checkbox" data-c="orderListed" ${m.onlyListed ? 'checked' : ''}> Only products on display</label></div>
-  <div class="tw"><table><thead><tr><th>Product</th><th class="n">On hand</th><th class="n">Reorder at</th><th class="n">Unit cost</th><th class="n">Quantity</th></tr></thead><tbody>${Object.entries(groups).map(([pid, its]) => { const p = TT.pmap[pid]; const unrel = b.type === 'book' && p.release > day() + 2;
-    return (its.length > 1 ? `<tr class="sub"><td colspan="4"><b>${esc(p.name)}</b> <span class="small muted">${esc(p.cat)}${b.listed[pid] ? '' : ' · not on display'}</span></td><td class="n"><button class="btn sm" data-a="orderRun" data-p="${pid}">+2 of each</button></td></tr>` : '') +
-    its.map(it => `<tr><td>${its.length > 1 ? `<span style="padding-left:12px">${esc(it.label)}</span>` : `<div class="nm">${esc(p.name)}</div><div class="sb">${esc(p.cat)}${it.label ? ' · ' + esc(it.label) : ''}${b.listed[pid] ? '' : ' · not on display'}${unrel ? ` · orderable from day ${p.release - 2}` : ''}</div>`}</td><td class="n">${R.itShelf(it) + R.itStock(it)}${R.onOrder(S, b, it.sku) ? ` <span class="muted">+${R.onOrder(S, b, it.sku)}</span>` : ''}</td><td class="n">${it.min}</td><td class="n">${M(R.supUnit(b, m.sup, it.sku))}</td><td class="n"><input class="qty" type="number" min="0" max="999" value="${m.qty[it.sku] || ''}" data-c="oq" data-s="${esc(it.sku)}" aria-label="Quantity" ${unrel ? 'disabled' : ''}></td></tr>`).join(''); }).join('')}</tbody></table></div>`;
-  return dlg(`New order: ${esc(s.name)}`, `Delivery in about ${dur(s.lead)} · fee ${M(s.fee)} · minimum ${M(s.minOrder)} · stockroom room for ${R.freeSpace(S, b)} more units`, body, `<div id="orderSum" style="flex:1">${orderSum()}</div><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="orderPlace">Place order</button>`, 'wide');
+  const body = `<p class="small muted" style="margin-top:0">You order by the box. Every box goes to the back door, then onto a rack in the stockroom.</p><div class="row" style="margin-bottom:10px"><button class="btn" data-a="orderSuggest">Suggest for low stock</button><button class="btn" data-a="orderClear">Clear</button><select data-c="orderCat" aria-label="Category"><option value="">All categories</option>${[...new Set(R.supItems(b, m.sup).map(i => TT.pmap[i.pid].cat))].map(c => `<option ${m.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><label class="row small"><input type="checkbox" data-c="orderListed" ${m.onlyListed ? 'checked' : ''}> Only products already on display</label></div>
+  <div class="tw"><table><thead><tr><th>Product</th><th class="n">Have</th><th class="n">Box of</th><th class="n">Per unit</th><th class="n">Per box</th><th class="n">Sells for</th><th class="n">Boxes</th></tr></thead><tbody>${Object.entries(groups).map(([pid, its]) => { const p = TT.pmap[pid]; const unrel = b.type === 'book' && p.release > day() + 2;
+    const info = b.type === 'grocery' ? (p.life ? `keeps ${p.life} days` : 'shelf-stable') + (p.cold ? `, ${p.cold === 'fridge' ? 'refrigerated' : 'frozen'}` : '') : p.cat;
+    return (its.length > 1 ? `<tr class="sub"><td colspan="6"><b>${esc(p.name)}</b> <span class="small muted">${esc(p.cat)}${b.listed[pid] ? '' : ' · not on display'}</span></td><td class="n"><button class="btn sm" data-a="orderRun" data-p="${pid}">+1 of each</button></td></tr>` : '') +
+    its.map(it => { const u = R.supUnit(b, m.sup, it.sku), pk = R.packOf(b, it); return `<tr><td>${its.length > 1 ? `<span style="padding-left:12px">${esc(it.label)}</span>` : `<div class="nm">${esc(p.name)}</div><div class="sb">${esc(info)}${b.listed[pid] ? '' : ' · not on display yet'}${unrel ? ` · orderable from day ${p.release - 2}` : ''}</div>`}</td><td class="n">${R.itShelf(it) + R.itStock(b, it)}${R.onOrder(S, b, it.sku) ? ` <span class="muted">+${R.onOrder(S, b, it.sku)}</span>` : ''}</td><td class="n">${pk}</td><td class="n">${M(u)}</td><td class="n">${M(u * pk)}</td><td class="n">${M(it.price)}</td><td class="n"><input class="qty" type="number" min="0" max="99" value="${m.qty[it.sku] || ''}" data-c="oq" data-s="${esc(it.sku)}" aria-label="Boxes of ${esc(R.itemName(b, it))}" ${unrel ? 'disabled' : ''}></td></tr>`; }).join(''); }).join('')}</tbody></table></div>`;
+  return dlg(`New order: ${esc(s.name)}`, `Delivery in about ${dur(s.lead)} · fee ${M(s.fee)} · minimum ${M(s.minOrder)} · ${R.freeSlots(b).length - R.atDock(b).length} free rack spaces`, body, `<div id="orderSum" style="flex:1">${orderSum()}</div><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="orderPlace">Place order</button>`, 'wide');
 };
 function orderSum() {
   const m = UI.modal; const b = R.branchOf(S, m.bid);
-  const q = R.quoteOrder(S, b, m.sup, Object.entries(m.qty).map(([sku, qty]) => ({ sku, qty: +qty || 0 })));
-  const s = R.SUPPLIERS[m.sup];
-  return `<span class="num">${q.units} units · ${M(q.sub)} + ${M(q.fee)} fee = <b>${M(q.total)}</b></span>${q.sub && q.sub < s.minOrder ? ` <span class="pill warn">Below minimum</span>` : ''}${q.units > R.freeSpace(S, b) ? ' <span class="pill bad">Too big for stockroom</span>' : ''}${q.total > S.cash ? ' <span class="pill bad">Not enough cash</span>' : ''}`;
+  const q = R.quoteOrder(S, b, m.sup, Object.entries(m.qty).map(([sku, n]) => ({ sku, cases: +n || 0 })));
+  const s = R.SUPPLIERS[m.sup]; const free = R.freeSpace(S, b);
+  return `<span class="num">${q.cases} boxes (${q.units} units) · ${M(q.sub)} + ${M(q.fee)} fee = <b>${M(q.total)}</b></span>${q.sub && q.sub < s.minOrder ? ` <span class="pill warn">Below minimum</span>` : ''}${q.cases > free ? ` <span class="pill warn">Only ${free} free rack spaces</span>` : ''}${q.total > S.cash ? ' <span class="pill bad">Not enough cash</span>' : ''}`;
 }
 MD.review = m => {
   const po = S.pos.find(p => p.id === m.po); const b = R.branchOf(S, po.bid);
   if (po.status !== 'arrived') return dlg(`${po.id}`, '', '<div class="empty">This delivery has already been handled.</div>', '<button class="btn" data-a="close">Close</button>', 'narrow');
-  let credit = 0; for (const l of po.lines) credit += (l.qty - (l.delivered - l.dmg)) * l.unit;
-  const body = `<div class="tw"><table><thead><tr><th>Item</th><th class="n">Ordered</th><th class="n">Delivered</th><th class="n">Damaged</th><th class="n">Into stock</th><th class="n">Credit</th></tr></thead><tbody>${po.lines.map(l => { const good = l.delivered - l.dmg; const bad = good < l.qty; return `<tr><td>${esc(R.itemName(b, b.items[l.sku]))}</td><td class="n">${l.qty}</td><td class="n ${l.delivered < l.qty ? 'negc' : ''}">${l.delivered}</td><td class="n ${l.dmg ? 'negc' : ''}">${l.dmg || ''}</td><td class="n"><b>${good}</b></td><td class="n">${bad ? M((l.qty - good) * l.unit) : ''}</td></tr>`; }).join('')}</tbody></table></div>
-  <div class="grid g3 mt"><div class="tile"><div class="k">Units into stockroom</div><div class="v">${R.deliveryIn(po)}</div></div><div class="tile"><div class="k">Stockroom free</div><div class="v">${R.stockCap(b) - R.stockUsed(b)}</div></div><div class="tile"><div class="k">Credit for discrepancies</div><div class="v ${credit ? 'pos' : ''}">${M(credit)}</div></div></div>
-  <p class="small muted">Accepting reports any shortage or damage to ${esc(R.SUPPLIERS[po.sup].name)} and you are credited for those units. Refusing sends everything back: you get the goods refunded but not the ${M(po.fee)} delivery fee.</p><div class="err" id="revErr"></div>`;
-  return dlg(`Check in ${po.id}`, `${esc(R.SUPPLIERS[po.sup].name)} · arrived ${ago(po.arrivedAt)} · paid ${M(po.total)}`, body, `<button class="btn bad" data-a="ask" data-q="Refuse ${po.id} and send it back?" data-do="refuse" data-p="${po.id}">Refuse delivery</button><button class="btn pri" data-a="accept" data-p="${po.id}">${credit ? 'Report discrepancies & accept' : 'Accept delivery'}</button>`);
+  let credit = 0; for (const l of po.lines) credit += (l.cases - (l.delivered - l.dmg)) * l.pack * l.unit;
+  const body = `<div class="tw"><table><thead><tr><th>Item</th><th class="n">Boxes ordered</th><th class="n">Arrived</th><th class="n">Damaged</th><th class="n">Good boxes</th><th class="n">Credit</th></tr></thead><tbody>${po.lines.map(l => { const good = l.delivered - l.dmg; const bad = good < l.cases; return `<tr><td>${esc(R.itemName(b, b.items[l.sku]))} <span class="small muted">box of ${l.pack}</span></td><td class="n">${l.cases}</td><td class="n ${l.delivered < l.cases ? 'negc' : ''}">${l.delivered}</td><td class="n ${l.dmg ? 'negc' : ''}">${l.dmg || ''}</td><td class="n"><b>${good}</b></td><td class="n">${bad ? M((l.cases - good) * l.pack * l.unit) : ''}</td></tr>`; }).join('')}</tbody></table></div>
+  <div class="grid g3 mt"><div class="tile"><div class="k">Boxes to the back door</div><div class="v">${R.deliveryIn(po)}</div></div><div class="tile"><div class="k">Free rack spaces</div><div class="v">${R.freeSlots(b).length}</div></div><div class="tile"><div class="k">Credit for problems</div><div class="v ${credit ? 'pos' : ''}">${M(credit)}</div></div></div>
+  <p class="small muted">Accepting reports missing and damaged boxes to ${esc(R.SUPPLIERS[po.sup].name)} and you are credited for them. The good boxes are left at the back door for you to unpack. Refusing sends everything back: the goods are refunded, the ${M(po.fee)} delivery fee is not.</p><div class="err" id="revErr"></div>`;
+  return dlg(`Check in ${po.id}`, `${esc(R.SUPPLIERS[po.sup].name)} · arrived ${ago(po.arrivedAt)} · paid ${M(po.total)}`, body, `<button class="btn bad" data-a="ask" data-q="Refuse ${po.id} and send it back?" data-do="refuse" data-p="${po.id}">Refuse delivery</button><button class="btn pri" data-a="accept" data-p="${po.id}">${credit ? 'Report problems & accept' : 'Accept delivery'}</button>`);
 };
 MD.po = m => {
-  const po = S.pos.find(p => p.id === m.po); const b = R.branchOf(S, po.bid) || B();
-  return dlg(po.id, `${esc(R.SUPPLIERS[po.sup].name)} · placed day ${R.dayOf(po.placed)} ${R.fmtTime(po.placed)}${po.by === 'manager' ? ' by the store manager' : ''}`, `<div class="tw"><table><thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Unit</th><th class="n">Line</th>${po.lines[0].delivered != null ? '<th class="n">Delivered</th><th class="n">Damaged</th>' : ''}</tr></thead><tbody>${po.lines.map(l => `<tr><td>${esc(R.itemName(b, b.items[l.sku]))}</td><td class="n">${l.qty}</td><td class="n">${M(l.unit)}</td><td class="n">${M(l.unit * l.qty)}</td>${l.delivered != null ? `<td class="n">${l.delivered}</td><td class="n">${l.dmg || ''}</td>` : ''}</tr>`).join('')}<tr class="sub"><td colspan="3">Delivery fee</td><td class="n">${M(po.fee)}</td>${po.lines[0].delivered != null ? '<td></td><td></td>' : ''}</tr><tr class="sub"><td colspan="3"><b>Total paid</b></td><td class="n"><b>${M(po.total)}</b></td>${po.lines[0].delivered != null ? '<td></td><td></td>' : ''}</tr></tbody></table></div>${po.credit ? `<p>Credited back: <b class="num">${M(po.credit)}</b></p>` : ''}`, '<button class="btn" data-a="close">Close</button>');
+  const po = S.pos.find(p => p.id === m.po); const b = R.branchOf(S, po.bid) || B(); const got = po.lines[0].delivered != null;
+  return dlg(po.id, `${esc(R.SUPPLIERS[po.sup].name)} · placed day ${R.dayOf(po.placed)} ${R.fmtTime(po.placed)}${po.by === 'manager' ? ' by the store manager' : ''}`, `<div class="tw"><table><thead><tr><th>Item</th><th class="n">Boxes</th><th class="n">Units</th><th class="n">Per unit</th><th class="n">Line</th>${got ? '<th class="n">Arrived</th><th class="n">Damaged</th>' : ''}</tr></thead><tbody>${po.lines.map(l => `<tr><td>${esc(R.itemName(b, b.items[l.sku]))}</td><td class="n">${l.cases}</td><td class="n">${l.qty}</td><td class="n">${M(l.unit)}</td><td class="n">${M(l.unit * l.qty)}</td>${got ? `<td class="n">${l.delivered}</td><td class="n">${l.dmg || ''}</td>` : ''}</tr>`).join('')}<tr class="sub"><td colspan="4">Delivery fee</td><td class="n">${M(po.fee)}</td>${got ? '<td></td><td></td>' : ''}</tr><tr class="sub"><td colspan="4"><b>Total paid</b></td><td class="n"><b>${M(po.total)}</b></td>${got ? '<td></td><td></td>' : ''}</tr></tbody></table></div>${po.credit ? `<p>Credited back: <b class="num">${M(po.credit)}</b></p>` : ''}`, '<button class="btn" data-a="close">Close</button>');
 };
 MD.cust = m => {
   const b = R.branchOf(S, m.bid), c = b.cust[m.cid]; const ty = R.custType(b, c);
@@ -467,8 +549,8 @@ MD.wizard = m => {
   <label class="f mt8">Store name<input type="text" id="wzName" value="${esc(w.name)}" maxlength="40" data-c="wzName"></label>
   <div class="mt"><div class="small muted">District</div><div class="grid g3 mt8">${Object.values(R.LOCS).map(l => `<button class="btn" style="text-align:left;white-space:normal;${w.loc === l.id ? 'border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)' : ''}" data-a="wzSet" data-k="loc" data-v="${l.id}" aria-pressed="${w.loc === l.id}"><b>${l.name}</b><br><span class="small muted">${l.kind} · fit ×${l.aff[w.type].toFixed(2)} · rent ×${l.rent}</span></button>`).join('')}</div><p class="small muted">${L.note}</p></div>
   <div class="mt"><div class="small muted">Size</div><div class="seg mt8">${Object.values(R.SIZES).map(z => `<button data-a="wzSet" data-k="size" data-v="${z.id}" aria-pressed="${w.size === z.id}">${z.label}</button>`).join('')}</div></div>
-  <div class="mt"><div class="small muted">Starting equipment (included)</div><div class="row mt8">${TT.equip.filter(e => fake.equip[e.id]).map(e => `<span class="pill">${fake.equip[e.id]} × ${esc(e.name)}</span>`).join('')}<span class="pill">Stockroom ${R.stockCap(fake)} units</span></div></div>
-  <label class="row mt"><input type="checkbox" data-c="wzStock" ${w.stock ? 'checked' : ''}> Opening inventory: ${stock.units} units across ${Object.keys(fake.listed).length} products, on the shelves on day one (${M(stock.cost)})</label>
+  <div class="mt"><div class="small muted">Starting equipment (included)</div><div class="row mt8">${TT.equip.filter(e => fake.equip[e.id]).map(e => `<span class="pill">${fake.equip[e.id]} × ${esc(e.name)}</span>`).join('')}<span class="pill">${R.stockCap(fake)} rack spaces</span></div></div>
+  <label class="row mt"><input type="checkbox" data-c="wzStock" ${w.stock ? 'checked' : ''}> Opening inventory: staff fill every shelf before you open, ${stock.units} units across ${Object.keys(fake.listed).length} products (${M(stock.cost)}). Untick to start this store empty and stock it yourself</label>
  <label class="row mt8"><input type="checkbox" data-c="wzCash" ${w.cashier ? 'checked' : ''}> Hire a cashier on opening day so customers aren't left waiting while you're at another store (about $14/hour)</label>
   <label class="row mt8"><input type="checkbox" data-c="wzGrand" ${w.grand ? 'checked' : ''}> Grand opening campaign: +80% traffic for 2 days ($500.00)</label>
   <div class="grid g3 mt"><div class="tile"><div class="k">Investment</div><div class="v">${M(cost)}</div></div><div class="tile"><div class="k">Rent per day</div><div class="v">${M(rent)}</div></div><div class="tile"><div class="k">Expected traffic</div><div class="v">${(traffic * 0.95 * 13).toFixed(0)}/day</div></div></div>
@@ -508,7 +590,7 @@ function renderAll() { if (!S) return renderSetup(); document.body.classList.rem
 function renderSetup() {
   $('app').style.display = 'none';
   let el = $('setup'); if (!el) { el = document.createElement('div'); el.id = 'setup'; document.body.appendChild(el); }
-  el.innerHTML = `<div class="setup"><div class="card"><div class="small muted" style="text-transform:uppercase;letter-spacing:.1em;font-weight:600">Retail Empire Simulator</div><div class="hero mt8">Start with one grocery store. End with an empire.</div><p class="muted">Order stock, run the register, hire staff, then open clothing, toy and book stores across the city. Day 1 is Sunday, November 1: the holiday season is coming.</p>
+  el.innerHTML = `<div class="setup"><div class="card"><div class="small muted" style="text-transform:uppercase;letter-spacing:.1em;font-weight:600">Retail Empire Simulator</div><div class="hero mt8">Start with one grocery store. End with an empire.</div><p class="muted">Your first shop is empty. Choose what to sell, order it by the box, unpack deliveries into the stockroom, keep the shelves filled and run the register. Then hire staff and open clothing, toy and book stores across the city. Day 1 is Sunday, November 1, and it's 5 a.m.</p>
   <label class="f mt">Company name<input type="text" id="suCo" value="Cornerstone Retail" maxlength="40"></label>
   <label class="f mt8">First store's name<input type="text" id="suStore" value="Main Street Market" maxlength="40"></label>
   <div class="mt"><div class="small muted">Mode</div><div class="grid g2 mt8"><label class="card flat" style="cursor:pointer"><input type="radio" name="mode" value="career" checked> <b>Career</b><div class="small muted">$6,000 starting cash and milestones to reach.</div></label><label class="card flat" style="cursor:pointer"><input type="radio" name="mode" value="sandbox"> <b>Sandbox</b><div class="small muted">Pick your money and try every store type right away.</div></label></div></div>
@@ -521,8 +603,7 @@ const A = {
   start() {
     const mode = document.querySelector('input[name=mode]:checked').value;
     const st = R.newGame({ company: $('suCo').value.trim() || 'Cornerstone Retail', storeName: $('suStore').value.trim() || 'Main Street Market', mode, cash: mode === 'sandbox' ? C(+$('suCash').value) : C(6000) });
-    $('setup') && $('setup').remove(); attach(st); UI.view = 'hq'; save(); renderAll();
-    toast('Your store opens at 08:00. Watch the Checkout screen for customers.', 'good');
+    $('setup') && $('setup').remove(); attach(st); UI.view = 'overview'; save(); renderAll();
   },
   nav(d) { UI.view = d.v; UI.nav = false; renderTop(); renderNav(); renderMain(); window.scrollTo(0, 0); },
   go(d) { UI.bid = d.b; A.nav(d); },
@@ -549,20 +630,33 @@ const A = {
   },
   refund() { const m = UI.modal; const r = R.completeSale(S, m.bid, m.cid, {}); if (!r.ok) { $('serveErr').textContent = r.err; return; } UI.modal = null; renderModal(); toast(`Refunded ${M(r.refund)}. Item back in stock.`, 'good'); UI.dirty = true; renderMain(); },
   tidy() { res(R.tidy(S, B().id), 'The floor is tidy again.'); renderMain(); },
-  fill(d) { const n = R.toShelf(S, B(), d.s); toast(n ? `Moved ${n} units to the shelf.` : 'Nothing to move.', n ? 'good' : ''); UI.dirty = true; renderMain(); },
-  fillAll() { const n = R.fillAll(S, B()); toast(n ? `Moved ${n} units from the stockroom to shelves.` : 'Shelves are as full as the stockroom allows.', n ? 'good' : ''); UI.dirty = true; renderMain(); },
+  fillAll() { const n = R.fillAll(S, B()); toast(n ? `Your stocker moved ${n} units onto the shelves.` : 'Shelves are as full as the stockroom allows.', n ? 'good' : ''); UI.dirty = true; renderMain(); },
+  fetch(d) { const b = B(); const its = Object.values(b.items).filter(i => i.pid === d.p); const mx = R.shelfMaxOf(b, T(b).pmap[d.p]);
+    const c = b.cases.filter(x => its.some(i => i.sku === x.sku) && x.loc !== 'hands' && !R.caseExpired(S, x) && R.itShelf(b.items[x.sku]) < mx).sort((x, y) => R.itShelf(b.items[x.sku]) - R.itShelf(b.items[y.sku]) || (x.exp == null ? 1e9 : x.exp) - (y.exp == null ? 1e9 : y.exp))[0];
+    if (!c) { toast('No box of this in the stockroom for a shelf that needs it.', 'warn'); return; }
+    if (res(R.takeCase(S, b, c.id))) renderMain(); },
+  stockBox(d) { const b = B(); const c = R.caseOf(b, d.id); const name = c ? boxName(b, c) : ''; const r = R.stockCase(S, b, d.id); if (!res(r)) return; toast(`Stocked ${r.moved} × ${name}. ${r.left ? `${r.left} left in the box.` : 'Box empty, flattened.'}`, 'good'); renderMain(); renderNav(); },
+  putBack(d) { const b = B(); const r = R.putCase(S, b, d.id); if (!r.ok) { const r2 = R.putCase(S, b, d.id, 'dock'); if (res(r2)) toast('The racks are full, so you left it at the back door.', 'warn'); } else UI.dirty = true; UI.sel = null; renderMain(); renderNav(); },
+  selBox(d) { UI.sel = UI.sel === +d.id ? null : +d.id; renderMain(); },
+  slot(d) { const b = B(); if (UI.sel == null) { toast('Tap a box first, then an empty space.'); return; } if (res(R.putCase(S, b, UI.sel, d.l))) { UI.sel = null; renderMain(); renderNav(); } },
+  carry(d) { const b = B(); if (res(R.takeCase(S, b, d.id))) { UI.sel = null; renderMain(); renderNav(); } },
+  unpack(d) { const b = B(); if (res(R.putCase(S, b, d.id))) { UI.sel = null; renderMain(); renderNav(); } },
+  unpackAll() { const n = R.putAwayAll(S, B()); toast(n ? `Unpacked ${n} boxes.` : 'No free rack space.', n ? 'good' : 'warn'); UI.dirty = true; renderMain(); renderNav(); },
+  combine() { const r = R.combineCases(S, B()); toast(r.freed ? `Combined part-full boxes and freed ${r.freed} rack space${r.freed > 1 ? 's' : ''}.` : 'No part-full boxes to combine.', r.freed ? 'good' : ''); UI.dirty = true; renderMain(); },
+  openStore() { if (res(R.openStore(S, B().id))) { renderAll(); } },
+  waitDelivery() { const b = B(); if (b.active.length) { toast('Customers are in the store. Serve them first.', 'warn'); return; } const po = S.pos.filter(p => p.bid === b.id && p.status === 'transit').sort((x, y) => x.eta - y.eta)[0]; if (!po) return; let g = 0; while (po.status === 'transit' && g++ < 2880 && !b.active.length) R.step(S); UI.dirty = true; renderAll(); },
   invTab(d) { UI.invTab = d.k; renderMain(); },
   custF(d) { UI.custF = d.k; renderMain(); },
   list(d) { res(R.setListed(S, B(), d.p, d.on === '1')); renderMain(); },
-  order(d) { openModal({ k: 'order', bid: B().id, sup: d.s, qty: {}, cat: '', onlyListed: true }); },
-  orderSuggest() { const m = UI.modal; for (const l of R.reorderSuggestion(S, R.branchOf(S, m.bid), m.sup)) m.qty[l.sku] = l.qty; m.keepScroll = true; renderModal(); if (!Object.keys(m.qty).length) toast('Nothing is below its reorder point.'); },
+  order(d) { const b = B(); openModal({ k: 'order', bid: b.id, sup: d.s, qty: {}, cat: '', onlyListed: Object.keys(b.listed).length >= 8 }); },
+  orderSuggest() { const m = UI.modal; for (const l of R.reorderSuggestion(S, R.branchOf(S, m.bid), m.sup)) m.qty[l.sku] = l.cases; m.keepScroll = true; renderModal(); if (!Object.keys(m.qty).length) toast('Nothing is below its reorder point.'); },
   orderClear() { UI.modal.qty = {}; renderModal(); },
-  orderRun(d) { const m = UI.modal; const b = R.branchOf(S, m.bid); for (const it of Object.values(b.items)) if (it.pid === d.p) m.qty[it.sku] = (+m.qty[it.sku] || 0) + 2; m.keepScroll = true; renderModal(); },
-  orderPlace() { const m = UI.modal; const lines = Object.entries(m.qty).map(([sku, q]) => ({ sku, qty: +q || 0 })).filter(l => l.qty > 0); const r = R.placeOrder(S, m.bid, m.sup, lines); if (!res(r)) return; UI.modal = null; renderModal(); toast(`${r.po.id} placed: ${M(r.po.total)}. Arrives around ${R.fmtTime(r.po.eta)}${R.dayOf(r.po.eta) !== day() ? ' on day ' + R.dayOf(r.po.eta) : ''}.`, 'good'); renderMain(); renderTop(); },
+  orderRun(d) { const m = UI.modal; const b = R.branchOf(S, m.bid); for (const it of Object.values(b.items)) if (it.pid === d.p) m.qty[it.sku] = (+m.qty[it.sku] || 0) + 1; m.keepScroll = true; renderModal(); },
+  orderPlace() { const m = UI.modal; const lines = Object.entries(m.qty).map(([sku, q]) => ({ sku, cases: +q || 0 })).filter(l => l.cases > 0); const r = R.placeOrder(S, m.bid, m.sup, lines); if (!res(r)) return; UI.modal = null; renderModal(); toast(`${r.po.id} placed: ${M(r.po.total)}. Arrives around ${R.fmtTime(r.po.eta)}${R.dayOf(r.po.eta) !== day() ? ' on day ' + R.dayOf(r.po.eta) : ''}.`, 'good'); renderMain(); renderTop(); },
   sign(d) { res(R.signSupplier(S, B().id, d.s), `Contract signed with ${R.SUPPLIERS[d.s].name}.`); renderMain(); renderTop(); },
   review(d) { openModal({ k: 'review', po: d.p }); },
   poView(d) { openModal({ k: 'po', po: d.p }); },
-  accept(d) { const r = R.acceptDelivery(S, d.p); if (!r.ok) { $('revErr').textContent = r.err; return; } UI.dirty = true; UI.modal = null; renderModal(); toast(`${r.units} units added to the stockroom${r.credit ? `, ${M(r.credit)} credited` : ''}.`, 'good'); renderMain(); renderNav(); renderTop(); },
+  accept(d) { const r = R.acceptDelivery(S, d.p); if (!r.ok) { $('revErr').textContent = r.err; return; } UI.dirty = true; UI.modal = null; renderModal(); toast(`${r.boxes} boxes are at the back door. Unpack them in the Stockroom${r.credit ? `. ${M(r.credit)} credited for problems` : ''}.`, 'good'); UI.view = 'stockroom'; renderMain(); renderNav(); renderTop(); },
   cust(d) { openModal({ k: 'cust', bid: B().id, cid: d.c }); },
   hire(d) { const r = R.hire(S, B().id, d.e); if (res(r, `${r.emp && r.emp.name} starts now.`)) renderMain(); },
   buyEq(d) { if (res(R.buyEquip(S, B().id, d.e), 'Installed.')) { renderMain(); renderTop(); } },
@@ -577,14 +671,15 @@ const A = {
   renameCo() { const n = $('coName').value.trim().slice(0, 40); if (n) { S.company = n; UI.dirty = true; toast('Saved.', 'good'); renderNav(); } },
   saveNow() { save(); toast(UI.saveErr || 'Saved.', UI.saveErr ? 'bad' : 'good'); renderMain(); },
   async copySave() { const o = Object.assign({}, S); delete o.onNote; const code = btoa(unescape(encodeURIComponent(JSON.stringify(o)))); try { await navigator.clipboard.writeText(code); toast('Save code copied. Keep it somewhere safe.', 'good'); } catch (e) { $('importBox').value = code; $('importBox').select(); toast('Copy was blocked. The code is in the box: select it and copy.', 'warn'); } },
-  importSave() { try { const o = JSON.parse(decodeURIComponent(escape(atob($('importBox').value.trim())))); if (!o || o.v !== 1 || !o.branches) throw 0; attach(o); save(); UI.view = 'hq'; renderAll(); toast('Save loaded.', 'good'); } catch (e) { toast('That save code could not be read. Check you pasted all of it.', 'bad'); } },
+  importSave() { try { const o = JSON.parse(decodeURIComponent(escape(atob($('importBox').value.trim())))); if (!o || o.v !== 2 || !o.branches) throw 0; attach(o); save(); UI.view = 'hq'; renderAll(); toast('Save loaded.', 'good'); } catch (e) { toast('That save code could not be read. Check you pasted all of it.', 'bad'); } },
   ask(d) { UI.confirm = { do: d.do, p: d.p, e: d.e }; openModal({ k: 'ask', q: d.q }); },
   confirmYes() {
     const c = UI.confirm; UI.modal = null; renderModal(); const b = B();
     if (c.do === 'reset') { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = null; renderAll(); return; }
     if (c.do === 'fire') res(R.fire(S, b.id, c.e), 'Employee let go.');
     if (c.do === 'refuse') res(R.refuseDelivery(S, c.p), 'Delivery refused. Goods refunded.');
-    if (c.do === 'toggleStatus') res(R.setStatus(S, b.id, b.status === 'open' ? 'closed' : 'open'));
+    if (c.do === 'discard') { const r = R.discardCase(S, b, c.e); if (res(r)) { toast(`Threw out ${r.units} units (${M(r.value)} written off).`); UI.sel = null; } }
+    if (c.do === 'toggleStatus') res(b.setup ? R.openStore(S, b.id) : R.setStatus(S, b.id, b.status === 'open' ? 'closed' : 'open'));
     if (c.do === 'sellB') { const r = R.sellBranch(S, b.id); if (res(r)) { UI.bid = S.branches[0].id; UI.view = 'branches'; } }
     UI.dirty = true; renderMain(); renderNav(); renderTop();
   }
@@ -617,7 +712,7 @@ const IN = {
   invQ(el) { UI.invQ = el.value; const pos = el.selectionStart; renderMain(); const n = $('invQ'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } },
   custQ(el) { UI.custQ = el.value; const pos = el.selectionStart; renderMain(); const n = document.querySelector('[data-c=custQ]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } },
   cashIn() { onCashIn(); },
-  oq(el) { const v = Math.max(0, Math.min(999, Math.round(+el.value || 0))); if (v) UI.modal.qty[el.dataset.s] = v; else delete UI.modal.qty[el.dataset.s]; $('orderSum').innerHTML = orderSum(); },
+  oq(el) { const v = Math.max(0, Math.min(99, Math.round(+el.value || 0))); if (v) UI.modal.qty[el.dataset.s] = v; else delete UI.modal.qty[el.dataset.s]; $('orderSum').innerHTML = orderSum(); },
   wzName(el) { UI.wiz.name = el.value; }
 };
 

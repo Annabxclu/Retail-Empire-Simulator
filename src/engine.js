@@ -38,9 +38,9 @@ const LOCS = {
   harbor:   { id:'harbor', name:'Harbor Plaza', kind:'Waterfront, tourists', traffic:1.1, rent:1.2, wealth:1.3, aff:{grocery:0.85,clothing:1.0,toy:1.15,book:1.1}, note:'Visitors buy gifts. Higher spending per customer.' }
 };
 const SIZES = {
-  small:  { id:'small', label:'Small', cost:1, rent:1, stock:400, eq:1, traffic:1 },
-  medium: { id:'medium', label:'Medium', cost:1.8, rent:1.7, stock:700, eq:1.6, traffic:1.45 },
-  large:  { id:'large', label:'Large', cost:3, rent:2.6, stock:1100, eq:2.4, traffic:2 }
+  small:  { id:'small', label:'Small', cost:1, rent:1, racks:8, stock:400, eq:1, traffic:1 },
+  medium: { id:'medium', label:'Medium', cost:1.8, rent:1.7, racks:14, stock:700, eq:1.6, traffic:1.45 },
+  large:  { id:'large', label:'Large', cost:3, rent:2.6, racks:20, stock:1100, eq:2.4, traffic:2 }
 };
 
 /* Catalogs */
@@ -159,20 +159,21 @@ function itemsOf(type, p) {
 const EQ = (id, name, cost, desc, o = {}) => ({ id, name, cost:C(cost), desc, fac:o.fac||null, max:o.max||20, util:o.util||2 });
 const TYPES = {
   grocery: {
-    id:'grocery', label:'Grocery store', short:'Grocery', traffic:5, openCost:C(25000), rent:C(130), util:C(22),
+    id:'grocery', label:'Grocery store', short:'Grocery', traffic:4.2, openCost:C(25000), rent:C(130), util:C(22),
     desc:'Fresh food and everyday essentials. Lots of customers, thin margins, and stock that expires.',
     specials:['Fresh food expires and spoils overnight','Refrigerated and freezer cases limit what you can sell cold','Departments to unlock: meat counter, frozen, household','Fast-moving stock needs frequent reorders'],
     catalog:GROCERY, facings:{ ambient:'Shelf facings', fridge:'Refrigerated facings', freezer:'Freezer facings' },
     shelfMax:{ ambient:20, fridge:14, freezer:14 }, defMin:6, defReorder:12,
     facingOf:p => p.cold || 'ambient',
     startDepts:['Bakery','Dairy','Produce','Pantry','Beverages','Snacks'],
-    startEquip:{ shelf:3, fridge:1, register:1 },
+    startEquip:{ shelf:3, fridge:1, register:1, storage:4 },
     equip:[
       EQ('shelf','Shelf unit',600,'Adds 6 shelf facings for ambient products.',{fac:{ambient:6},util:1}),
       EQ('fridge','Refrigerated case',1800,'Adds 4 refrigerated facings. Raises utilities.',{fac:{fridge:4},util:6}),
       EQ('freezer','Chest freezer',1600,'Adds 3 freezer facings. Needed for frozen food.',{fac:{freezer:3},util:8}),
       EQ('register','Checkout register',1200,'One more checkout lane for cashiers.',{max:6,util:2}),
-      EQ('stockroom','Stockroom expansion',2500,'Adds 300 units of stockroom space.',{max:6,util:2}),
+      EQ('storage','Storage rack',350,'Six more box spaces in the stockroom.',{max:20,util:0}),
+      EQ('trolley','Stock trolley',250,'Carry 4 boxes at a time instead of 2.',{max:1,util:0}),
       EQ('carts','Shopping carts (10)',400,'Customers pick up about 8% more items.',{max:3,util:0})
     ],
     upgrades:[
@@ -195,13 +196,14 @@ const TYPES = {
     desc:'Apparel tracked by size and color. Seasonal collections, fitting rooms, markdowns and returns.',
     specials:['Every size and color is its own stock line','Fitting rooms: customers queue to try things on','Winter and summer collections shift demand','Markdowns move old stock; returns come back days later'],
     catalog:CLOTHING, facings:{ rack:'Rack slots' }, shelfMax:{ rack:6 }, defMin:2, defReorder:6,
-    facingOf:() => 'rack', startEquip:{ rack:4, fitting:1, register:1 },
+    facingOf:() => 'rack', startEquip:{ rack:4, fitting:1, register:1, storage:4 },
     equip:[
       EQ('rack','Clothing rack',450,'Displays 2 more products (all sizes and colors).',{fac:{rack:2},util:0}),
       EQ('table','Display table',350,'Displays 1 more product and adds 4% to demand.',{fac:{rack:1},max:4,util:0}),
       EQ('fitting','Fitting room',1500,'One more fitting room. Shorter waits to try on.',{max:6,util:1}),
       EQ('register','Checkout register',1200,'One more checkout lane for cashiers.',{max:4,util:2}),
-      EQ('stockroom','Stockroom expansion',2500,'Adds 300 units of stockroom space.',{max:6,util:2})
+      EQ('storage','Storage rack',350,'Six more box spaces in the stockroom.',{max:20,util:0}),
+      EQ('trolley','Stock trolley',250,'Carry 4 boxes at a time instead of 2.',{max:1,util:0})
     ],
     upgrades:[],
     custTypes:[
@@ -218,13 +220,14 @@ const TYPES = {
     desc:'Toys for every age, collectibles and games. Demand surges for the holidays and follows trends.',
     specials:['Products have age ranges; parents shop for a child','Hot toys trend up and fade','December demand runs at more than twice normal','Gift wrapping at checkout and collector displays'],
     catalog:TOYS, facings:{ display:'Toy shelf slots', case:'Collectible case slots' }, shelfMax:{ display:10, case:20 }, defMin:3, defReorder:10,
-    facingOf:p => p.col ? 'case' : 'display', startEquip:{ display:3, case:1, register:1 },
+    facingOf:p => p.col ? 'case' : 'display', startEquip:{ display:3, case:1, register:1, storage:4 },
     equip:[
       EQ('display','Toy shelving',500,'Displays 3 more toys.',{fac:{display:3},util:0}),
       EQ('case','Collectible case',900,'Holds 2 collectible lines. Draws collectors.',{fac:{case:2},max:4,util:1}),
       EQ('giftwrap','Gift wrap station',600,'Lets you offer gift wrapping at $3 per item.',{max:1,util:0}),
       EQ('register','Checkout register',1200,'One more checkout lane for cashiers.',{max:4,util:2}),
-      EQ('stockroom','Stockroom expansion',2500,'Adds 300 units of stockroom space.',{max:6,util:2})
+      EQ('storage','Storage rack',350,'Six more box spaces in the stockroom.',{max:20,util:0}),
+      EQ('trolley','Stock trolley',250,'Carry 4 boxes at a time instead of 2.',{max:1,util:0})
     ],
     upgrades:[],
     custTypes:[
@@ -241,13 +244,14 @@ const TYPES = {
     desc:'Titles by genre, author and format. Readers come back for their favorite genres, new releases and preorders.',
     specials:['Hardcover and paperback stocked separately','Readers stick to genres they love','New releases spike, preorders arrive on release day','Back-to-school and holiday seasons'],
     catalog:BOOKS, facings:{ shelf:'Title slots' }, shelfMax:{ shelf:6 }, defMin:2, defReorder:6,
-    facingOf:() => 'shelf', startEquip:{ shelf:3, register:1 },
+    facingOf:() => 'shelf', startEquip:{ shelf:3, register:1, storage:4 },
     equip:[
       EQ('shelf','Bookshelf',450,'Holds 4 more titles.',{fac:{shelf:4},util:0}),
       EQ('newtable','New-release table',700,'Holds 1 title and doubles new-release demand.',{fac:{shelf:1},max:2,util:0}),
       EQ('nook','Reading nook',1200,'Readers linger: +6% traffic and happier visits.',{max:2,util:1}),
       EQ('register','Checkout register',1200,'One more checkout lane for cashiers.',{max:4,util:2}),
-      EQ('stockroom','Stockroom expansion',2500,'Adds 300 units of stockroom space.',{max:6,util:2})
+      EQ('storage','Storage rack',350,'Six more box spaces in the stockroom.',{max:20,util:0}),
+      EQ('trolley','Stock trolley',250,'Carry 4 boxes at a time instead of 2.',{max:1,util:0})
     ],
     upgrades:[],
     custTypes:[
@@ -260,6 +264,11 @@ const TYPES = {
     suppliers:['harbor','inkwell']
   }
 };
+const BULKY = ['g-water','g-towels','g-laundry','g-trash','g-rice','g-cola','g-pizza','g-icecream','t-console','t-robot','t-scooter','t-train','t-rccar'];
+for (const p of GROCERY) p.pack = BULKY.includes(p.id) ? 6 : p.cold === 'fridge' ? 6 : 12;
+for (const p of CLOTHING) p.pack = 3;
+for (const p of TOYS) p.pack = BULKY.includes(p.id) ? 2 : 4;
+for (const p of BOOKS) p.pack = 4;
 for (const t of Object.values(TYPES)) { t.pmap = {}; for (const p of t.catalog) t.pmap[p.id] = p; t.cats = [...new Set(t.catalog.map(p => p.cat))]; }
 
 const SUPPLIERS = {
@@ -277,8 +286,8 @@ function supCarries(sup, p) { if (sup.pubs) return sup.pubs.includes(p.pub); ret
 
 const ROLES = {
   cashier:  { id:'cashier', label:'Cashier', wage:[13,16], desc:'Runs a checkout register automatically.' },
-  stocker:  { id:'stocker', label:'Stocker', wage:[12,15], desc:'Moves stock from the stockroom to shelves every 10 minutes.' },
-  receiver: { id:'receiver', label:'Delivery receiver', wage:[13,16], desc:'Checks and accepts deliveries when they arrive.' },
+  stocker:  { id:'stocker', label:'Stocker', wage:[12,15], desc:'Carries boxes from the stockroom to the shelves every 10 minutes.' },
+  receiver: { id:'receiver', label:'Delivery receiver', wage:[13,16], desc:'Checks in deliveries and unpacks the boxes onto stockroom racks.' },
   cleaner:  { id:'cleaner', label:'Store cleaner', wage:[11,14], desc:'Keeps the store clean through the day.' },
   manager:  { id:'manager', label:'Store manager', wage:[24,32], desc:'Reorders stock below minimum each morning; staff work 10% faster.' }
 };
@@ -313,18 +322,14 @@ const LAST = ['Park','Nguyen','Garcia','Smith','Okafor','Chen','Patel','Rossi','
 /* ---------- state construction ---------- */
 function newGame(opts) {
   const S = {
-    v: 1, company: opts.company || 'Cornerstone Retail', mode: opts.mode || 'career', cash: opts.cash != null ? opts.cash : C(6000),
-    t: 7 * 60 + 30, speed: 1, seq: { id: 1, po: 1001, br: 1 }, branches: [], pos: [], ledger: [], stats: {}, notes: [],
+    v: 2, company: opts.company || 'Cornerstone Retail', mode: opts.mode || 'career', cash: opts.cash != null ? opts.cash : C(6000),
+    t: 5 * 60, speed: 1, seq: { id: 1, po: 1001, br: 1 }, branches: [], pos: [], ledger: [], stats: {}, notes: [],
     totals: { served: 0, bestDay: -1e12, revenue: 0 }, goals: {}, market: { hot: null, hotUntil: 0 }, brandUntil: 0, created: Date.now()
   };
-  const b = createBranch(S, { type:'grocery', name:opts.storeName || 'Main Street Market', loc:'main', size:'small', starter:true });
-  // pre-stocked starter store
-  for (const p of TYPES.grocery.catalog) if (b.listed[p.id]) {
-    const it = b.items[p.id]; const m = TYPES.grocery.shelfMax[TYPES.grocery.facingOf(p)];
-    addBatch(S, it, p, Math.round(m * 0.75), Math.round(m * 0.5), p.cost);
-  }
+  const b = createBranch(S, { type:'grocery', name:opts.storeName || 'Main Street Market', loc:'main', size:'small', empty:true });
+  b.status = 'closed'; b.setup = true; b.rep = 45;
   chargeDaily(S, b, 1);
-  note(S, b.id, 'info', `Welcome to ${S.company}. Your first store, ${b.name}, opens at 08:00. Customers will start lining up at Checkout.`);
+  note(S, b.id, 'info', `Welcome to ${S.company}. ${b.name} is empty and closed. Order stock, unpack the boxes, fill the shelves, then open the doors.`);
   return S;
 }
 function nid(S, p) { return p + (S.seq.id++); }
@@ -335,7 +340,7 @@ function createBranch(S, o) {
     id: 'b' + (S.seq.br++), type: o.type, name: o.name, loc: o.loc, size: sz.id, opened: dayOf(S.t), status: 'open',
     rep: 60, clean: 90, lastTidy: -999, equip: {}, upg: [], depts: o.type === 'grocery' ? [...T.startDepts] : [...T.cats],
     listed: {}, items: {}, markdown: {}, sups: [T.suppliers[0]], supRel: {}, cust: {}, active: [], queue: [], sched: [],
-    emps: [], apps: [], camps: [], loyalty: false, preorders: [], returnsDue: [], fitBusy: 0, invested: 0, stockBuyout: 0
+    emps: [], apps: [], camps: [], loyalty: false, preorders: [], returnsDue: [], fitBusy: 0, invested: 0, cases: [], lorder: []
   };
   for (const e of T.equip) b.equip[e.id] = 0;
   for (const [k, v] of Object.entries(T.startEquip)) b.equip[k] = Math.max(1, Math.round(v * sz.eq));
@@ -346,13 +351,14 @@ function createBranch(S, o) {
   }
   // list products by weight until facings are full
   const caps = facings(b); const used = {};
-  const sorted = [...T.catalog].sort((a, c) => (c.w || 1) * (c.pop || 50) - (a.w || 1) * (a.pop || 50));
+  const sorted = o.empty ? [] : [...T.catalog].sort((a, c) => (c.w || 1) * (c.pop || 50) - (a.w || 1) * (a.pop || 50));
+  const _unused = [...T.catalog].sort((a, c) => (c.w || 1) * (c.pop || 50) - (a.w || 1) * (a.pop || 50));
   for (const p of sorted) {
     if (!b.depts.includes(p.cat)) continue;
     if (o.type === 'book' && p.release > dayOf(S.t)) continue;
     if (o.type === 'clothing' && p.season === 'summer') continue;
     const f = T.facingOf(p); used[f] = used[f] || 0;
-    if (used[f] < (caps[f] || 0)) { b.listed[p.id] = true; used[f]++; }
+    if (used[f] < (caps[f] || 0)) { b.listed[p.id] = true; b.lorder.push(p.id); used[f]++; }
   }
   for (let i = 0; i < 45; i++) genCustomer(S, b);
   refreshApplicants(S, b);
@@ -372,28 +378,37 @@ function facingsUsed(b) {
   for (const pid of Object.keys(b.listed)) if (b.listed[pid]) out[T.facingOf(T.pmap[pid])]++;
   return out;
 }
-const stockCap = b => SIZES[b.size].stock + 300 * (b.equip.stockroom || 0);
+/* Stockroom: boxes ("cases") sit at the back door, on a rack slot, or in your hands. Shelf stock lives in item batches. */
+const SLOTS = 6;
+const stockCap = b => SLOTS * (b.equip.storage || 0);
+const stockUsed = b => b.cases.filter(c => c.loc[0] === 'S').length;
+const handsCap = b => b.equip.trolley ? 4 : 2;
+const inHands = b => b.cases.filter(c => c.loc === 'hands');
+const atDock = b => b.cases.filter(c => c.loc === 'dock');
 const itShelf = it => it.batches.reduce((a, x) => a + x.s, 0);
-const itStock = it => it.batches.reduce((a, x) => a + x.r, 0);
-function stockUsed(b) { let n = 0; for (const it of Object.values(b.items)) n += itStock(it); return n; }
+function itStock(b, it) { let n = 0; for (const c of b.cases) if (c.sku === it.sku) n += c.q; return n; }
+function packOf(b, it) { return TYPES[b.type].pmap[it.pid].pack || 1; }
+const slotId = (r, k) => `S${r}-${k}`;
+function slotList(b) { const out = []; for (let r = 0; r < (b.equip.storage || 0); r++) for (let k = 0; k < SLOTS; k++) out.push(slotId(r, k)); return out; }
+function freeSlots(b) { const used = new Set(b.cases.map(c => c.loc)); return slotList(b).filter(x => !used.has(x)); }
+const caseExpired = (S, c) => c.exp != null && c.exp < dayOf(S.t);
+function expFor(S, p) { const day = dayOf(S.t); return p.life ? day + p.life - 1 + (p.life > 5 ? randi(-1, 1) : 0) : null; }
+function addCase(S, b, sku, q, cost, exp, loc) { const c = { id: S.seq.id++, sku, q, c: cost, exp: exp == null ? null : exp, loc: loc || 'dock' }; b.cases.push(c); return c; }
+function shelfAdd(S, it, q, cost, exp) { it.batches.push({ id: S.seq.id++, s: q, c: cost, exp: exp == null ? null : exp }); sortBatches(it); }
+function caseOf(b, id) { return b.cases.find(c => c.id === +id); }
+function dropCase(b, c) { b.cases = b.cases.filter(x => x !== c); }
 function prodOf(b, it) { return TYPES[b.type].pmap[it.pid]; }
 function shelfMaxOf(b, p) { const T = TYPES[b.type]; return T.shelfMax[T.facingOf(p)]; }
 function refPrice(b, it) { const p = prodOf(b, it); if (b.type === 'book') return p.fmts[it.fmt].price; return p.price; }
 function costOf(b, it) { const p = prodOf(b, it); if (b.type === 'book') return p.fmts[it.fmt].cost; return p.cost; }
-function avgCost(b, it) { let q = 0, v = 0; for (const x of it.batches) { q += x.s + x.r; v += (x.s + x.r) * x.c; } return q ? Math.round(v / q) : costOf(b, it); }
+function avgCost(b, it) { let q = 0, v = 0; for (const x of it.batches) { q += x.s; v += x.s * x.c; } for (const c of b.cases) if (c.sku === it.sku) { q += c.q; v += c.q * c.c; } return q ? Math.round(v / q) : costOf(b, it); }
 function saleOn(S, b) { return b.camps.some(c => c.id === 'sale' && c.until > S.t); }
 function effPrice(S, b, it) {
   const md = b.markdown[it.pid] || 0;
   return Math.round(it.price * (1 - md / 100) * (saleOn(S, b) ? 0.9 : 1));
 }
-function addBatch(S, it, p, shelf, stock, cost) {
-  const day = dayOf(S.t);
-  const exp = p.life ? day + p.life - 1 + (p.life > 5 ? randi(-1, 1) : 0) : null;
-  it.batches.push({ id: S.seq.id++, s: shelf, r: stock, c: cost, exp });
-  sortBatches(it);
-}
 function sortBatches(it) { it.batches.sort((a, c) => (a.exp == null ? 1e9 : a.exp) - (c.exp == null ? 1e9 : c.exp)); }
-function cleanBatches(it) { it.batches = it.batches.filter(x => x.s + x.r > 0); }
+function cleanBatches(it) { it.batches = it.batches.filter(x => x.s > 0); }
 
 /* ---------- money & stats ---------- */
 function st(S, day, bid) {
@@ -544,7 +559,7 @@ function takeFromShelf(it, q) {
 function returnPicks(S, it, picks) {
   for (const pk of picks) {
     const x = it.batches.find(y => y.id === pk.bid);
-    if (x) x.s += pk.q; else it.batches.push({ id: S.seq.id++, s: pk.q, r: 0, c: pk.c, exp: pk.exp });
+    if (x) x.s += pk.q; else it.batches.push({ id: S.seq.id++, s: pk.q, c: pk.c, exp: pk.exp });
   }
   sortBatches(it);
 }
@@ -646,7 +661,7 @@ function completeSale(S, bid, cid, o = {}) {
   if (v.kind === 'return') {
     const r = v.data.ret; const it = b.items[r.sku];
     const amt = r.unit * r.qty;
-    if (it) { it.batches.push({ id: S.seq.id++, s: 0, r: r.qty, c: r.cost, exp: null }); sortBatches(it); }
+    if (it) addCase(S, b, r.sku, r.qty, r.cost, null, 'dock');
     cashTx(S, b.id, -amt, 'Refund', `Return from ${c.name}: ${r.qty} × ${itemName(b, it)}`);
     s.refunds += amt; s.cogs -= r.cost * r.qty;
     v.done = true; v.doneAt = S.t;
@@ -702,21 +717,66 @@ function serveCancel(S, bid, cid) {
 }
 
 /* ---------- inventory ops ---------- */
+// Staff-only: move units from stockroom/back-door boxes onto a shelf (oldest first).
 function toShelf(S, b, sku, want) {
-  const it = b.items[sku]; if (!it) return 0;
-  if (!b.listed[it.pid]) return 0;
-  const p = prodOf(b, it); const room = shelfMaxOf(b, p) - itShelf(it);
-  let q = Math.min(room, want == null ? 1e9 : want); let moved = 0;
-  for (const x of it.batches) { if (q <= 0) break; const n = Math.min(x.r, q); x.r -= n; x.s += n; q -= n; moved += n; }
+  const it = b.items[sku]; if (!it || !b.listed[it.pid]) return 0;
+  const p = prodOf(b, it); let q = Math.min(shelfMaxOf(b, p) - itShelf(it), want == null ? 1e9 : want); let moved = 0;
+  const src = b.cases.filter(c => c.sku === sku && c.loc !== 'hands' && !caseExpired(S, c)).sort((x, y) => (x.exp == null ? 1e9 : x.exp) - (y.exp == null ? 1e9 : y.exp) || (x.loc === 'dock') - (y.loc === 'dock'));
+  for (const c of src) { if (q <= 0) break; const n = Math.min(c.q, q); c.q -= n; q -= n; moved += n; shelfAdd(S, it, n, c.c, c.exp); if (!c.q) dropCase(b, c); }
   return moved;
 }
 function fillAll(S, b, budget) {
   let moved = 0; budget = budget == null ? 1e9 : budget;
-  const list = Object.values(b.items).filter(it => b.listed[it.pid] && itStock(it) > 0)
+  const list = Object.values(b.items).filter(it => b.listed[it.pid] && b.cases.some(c => c.sku === it.sku && c.loc !== 'hands'))
     .map(it => ({ it, ratio: itShelf(it) / shelfMaxOf(b, prodOf(b, it)) })).filter(x => x.ratio < 1).sort((a, c) => a.ratio - c.ratio);
   for (const { it } of list) { if (budget <= 0) break; const m = toShelf(S, b, it.sku, budget); moved += m; budget -= m; }
   return moved;
 }
+// Player actions on boxes
+function takeCase(S, b, id) {
+  const c = caseOf(b, id); if (!c) return { ok: false, err: 'That box is gone.' };
+  if (c.loc === 'hands') return { ok: true };
+  if (caseExpired(S, c)) return { ok: false, err: 'This box is past its use-by date. Throw it out instead.' };
+  if (inHands(b).length >= handsCap(b)) return { ok: false, err: `Your hands are full (${handsCap(b)} boxes). Stock a shelf or put a box down first.` };
+  c.loc = 'hands'; return { ok: true };
+}
+function putCase(S, b, id, loc) {
+  const c = caseOf(b, id); if (!c) return { ok: false, err: 'That box is gone.' };
+  if (loc === 'dock') { c.loc = 'dock'; return { ok: true, loc }; }
+  if (!loc) { loc = freeSlots(b)[0]; if (!loc) return { ok: false, err: 'The stockroom is full. Buy another storage rack or throw something out.' }; }
+  if (!slotList(b).includes(loc)) return { ok: false, err: 'That rack space does not exist.' };
+  if (b.cases.some(x => x.loc === loc && x !== c)) return { ok: false, err: 'That rack space is taken.' };
+  c.loc = loc; return { ok: true, loc };
+}
+function stockCase(S, b, id) {
+  const c = caseOf(b, id); if (!c || c.loc !== 'hands') return { ok: false, err: 'Pick the box up first.' };
+  const it = b.items[c.sku], p = prodOf(b, it);
+  if (caseExpired(S, c)) return { ok: false, err: 'This box is past its use-by date. Throw it out instead.' };
+  if (!b.listed[it.pid]) { const r = setListed(S, b, it.pid, true); if (!r.ok) return r; }
+  const room = shelfMaxOf(b, p) - itShelf(it);
+  if (room <= 0) return { ok: false, err: `The ${p.name} shelf is already full.` };
+  const n = Math.min(room, c.q); c.q -= n; shelfAdd(S, it, n, c.c, c.exp);
+  if (!c.q) dropCase(b, c);
+  return { ok: true, moved: n, left: c.q, full: itShelf(it) >= shelfMaxOf(b, p) };
+}
+function discardCase(S, b, id) {
+  const c = caseOf(b, id); if (!c) return { ok: false, err: 'That box is gone.' };
+  const v = c.q * c.c; st(S, dayOf(S.t), b.id).spoil += v; dropCase(b, c);
+  return { ok: true, value: v, units: c.q };
+}
+function combineCases(S, b) {
+  const groups = {};
+  for (const c of b.cases) if (c.loc[0] === 'S') { const k = c.sku + '|' + c.exp; (groups[k] = groups[k] || []).push(c); }
+  let freed = 0;
+  for (const g of Object.values(groups)) {
+    const pack = packOf(b, b.items[g[0].sku]); const part = g.filter(c => c.q < pack); if (part.length < 2) continue;
+    part.sort((x, y) => y.q - x.q);
+    let i = 0, j = part.length - 1;
+    while (i < j) { const a = part[i], z = part[j]; const n = Math.min(pack - a.q, z.q); if (n > 0) { a.c = Math.round((a.c * a.q + z.c * n) / (a.q + n)); a.q += n; z.q -= n; } if (!z.q) { dropCase(b, z); freed++; j--; } if (a.q >= pack) i++; }
+  }
+  return { ok: true, freed };
+}
+function putAwayAll(S, b) { let n = 0; for (const c of atDock(b)) { const r = putCase(S, b, c.id); if (!r.ok) break; n++; } return n; }
 function setListed(S, b, pid, on) {
   const T = TYPES[b.type], p = T.pmap[pid];
   if (!p) return { ok: false, err: 'Unknown product.' };
@@ -724,11 +784,20 @@ function setListed(S, b, pid, on) {
     if (b.listed[pid]) return { ok: true };
     if (!b.depts.includes(p.cat)) return { ok: false, err: `Open the ${p.cat} department first (Equipment & upgrades).` };
     const f = T.facingOf(p);
-    if (facingsUsed(b)[f] >= facings(b)[f]) return { ok: false, err: `No free ${T.facings[f].toLowerCase()}. Remove a product or buy more display space.` };
-    b.listed[pid] = true; return { ok: true };
+    if (facingsUsed(b)[f] >= facings(b)[f]) return { ok: false, err: `No free ${T.facings[f].toLowerCase()}. Clear a shelf or buy more display space.` };
+    b.listed[pid] = true; b.lorder = (b.lorder || []).filter(x => x !== pid); b.lorder.push(pid); return { ok: true };
   }
-  delete b.listed[pid];
-  for (const it of Object.values(b.items)) if (it.pid === pid) for (const x of it.batches) { x.r += x.s; x.s = 0; }
+  delete b.listed[pid]; b.lorder = (b.lorder || []).filter(x => x !== pid);
+  let back = 0;
+  for (const it of Object.values(b.items)) if (it.pid === pid) { for (const x of it.batches) if (x.s > 0) { addCase(S, b, it.sku, x.s, x.c, x.exp, 'dock'); back += x.s; } it.batches = []; }
+  return { ok: true, back };
+}
+function openStore(S, bid) {
+  const b = branchOf(S, bid); if (!b) return { ok: false, err: 'Not found.' };
+  let stocked = 0; for (const it of Object.values(b.items)) if (b.listed[it.pid] && itShelf(it) > 0) stocked++;
+  if (!stocked) return { ok: false, err: 'Put something on the shelves before you open.' };
+  b.setup = false; b.status = 'open';
+  note(S, b.id, 'good', `${b.name} is open. Customers will start arriving${(S.t % DAY) < OPEN ? ' at 08:00' : ''}.`);
   return { ok: true };
 }
 
@@ -743,28 +812,27 @@ function supItems(b, supId) {
   return Object.values(b.items).filter(it => { const p = T.pmap[it.pid]; return supCarries(sup, p) && b.depts.includes(p.cat); });
 }
 function onOrder(S, b, sku) { let n = 0; for (const po of S.pos) if (po.bid === b.id && (po.status === 'transit' || po.status === 'arrived')) for (const l of po.lines) if (l.sku === sku) n += l.qty; return n; }
+function casesInbound(S, b) { let n = 0; for (const po of S.pos) if (po.bid === b.id && (po.status === 'transit' || po.status === 'arrived')) for (const l of po.lines) n += l.cases; return n; }
 function quoteOrder(S, b, supId, lines) {
-  const sup = SUPPLIERS[supId]; let sub = 0, units = 0;
-  const ls = lines.filter(l => l.qty > 0).map(l => { const unit = supUnit(b, supId, l.sku); sub += unit * l.qty; units += l.qty; return { sku: l.sku, qty: l.qty, unit }; });
-  return { lines: ls, sub, units, fee: sup.fee, total: sub + sup.fee };
+  const sup = SUPPLIERS[supId]; let sub = 0, units = 0, cases = 0;
+  const ls = lines.filter(l => l.cases > 0 && b.items[l.sku]).map(l => { const unit = supUnit(b, supId, l.sku), pack = packOf(b, b.items[l.sku]), qty = l.cases * pack; sub += unit * qty; units += qty; cases += l.cases; return { sku: l.sku, cases: l.cases, pack, qty, unit }; });
+  return { lines: ls, sub, units, cases, fee: sup.fee, total: sub + sup.fee };
 }
 function placeOrder(S, bid, supId, lines, by) {
   const b = branchOf(S, bid), sup = SUPPLIERS[supId];
   if (!b || !sup) return { ok: false, err: 'Unknown supplier.' };
   if (!b.sups.includes(supId)) return { ok: false, err: 'Sign a contract with this supplier first.' };
   const T = TYPES[b.type], day = dayOf(S.t);
-  for (const l of lines) { const it = b.items[l.sku]; if (!it || !supCarries(sup, T.pmap[it.pid])) return { ok: false, err: 'This supplier does not carry one of the items.' }; const p = T.pmap[it.pid]; if (b.type === 'book' && p.release > day + 2) return { ok: false, err: `${p.name} can be ordered from 2 days before its release (day ${p.release}).` }; if (!Number.isInteger(l.qty) || l.qty < 0 || l.qty > 999) return { ok: false, err: 'Quantities must be whole numbers from 0 to 999.' }; }
+  for (const l of lines) { const it = b.items[l.sku]; if (!it || !supCarries(sup, T.pmap[it.pid])) return { ok: false, err: 'This supplier does not carry one of the items.' }; const p = T.pmap[it.pid]; if (b.type === 'book' && p.release > day + 2) return { ok: false, err: `${p.name} can be ordered from 2 days before its release (day ${p.release}).` }; if (!Number.isInteger(l.cases) || l.cases < 0 || l.cases > 99) return { ok: false, err: 'Order whole boxes, from 0 to 99 of each item.' }; }
   const q = quoteOrder(S, b, supId, lines);
   if (!q.lines.length) return { ok: false, err: 'Add at least one item.' };
   if (q.sub < sup.minOrder) return { ok: false, err: `Minimum order is ${money(sup.minOrder)} before the delivery fee.` };
   if (S.cash < q.total) return { ok: false, err: `Not enough cash. This order costs ${money(q.total)}.` };
-  const free = freeSpace(S, b);
-  if (q.units > free) return { ok: false, err: `This order is ${q.units} units, but your stockroom only has room for ${Math.max(0, free)} more (counting deliveries on the way). Order less or expand the stockroom.` };
   let eta = S.t + sup.lead + randi(-20, 40);
   if (b.type === 'book') for (const l of q.lines) { const p = T.pmap[b.items[l.sku].pid]; if (p.release > day) eta = Math.max(eta, (p.release - 1) * DAY + 7 * 60); }
   const po = { id: 'PO-' + (S.seq.po++), bid, sup: supId, lines: q.lines, fee: q.fee, sub: q.sub, total: q.total, placed: S.t, eta, status: 'transit', by: by || 'you' };
   S.pos.unshift(po);
-  cashTx(S, bid, -q.total, 'Purchase order', `${po.id} · ${sup.name} · ${q.units} units`);
+  cashTx(S, bid, -q.total, 'Purchase order', `${po.id} · ${sup.name} · ${q.cases} boxes, ${q.units} units`);
   const s = st(S, day, bid); s.purchases += q.sub; s.fees += q.fee;
   if (S.pos.length > 300) { const keep = S.pos.filter(p => p.status === 'transit' || p.status === 'arrived'); const closed = S.pos.filter(p => !(p.status === 'transit' || p.status === 'arrived')).slice(0, 200); S.pos = [...keep, ...closed].sort((a, c) => c.placed - a.placed); }
   return { ok: true, po };
@@ -773,29 +841,28 @@ function arrive(S, po) {
   const sup = SUPPLIERS[po.sup];
   po.status = 'arrived'; po.arrivedAt = S.t;
   for (const l of po.lines) {
-    l.delivered = Math.random() > sup.rel ? Math.floor(l.qty * rand(0.3, 0.85)) : l.qty;
-    l.dmg = Math.random() < 0.06 && l.delivered > 0 ? Math.min(l.delivered, randi(1, 2)) : 0;
+    l.delivered = Math.random() > sup.rel ? Math.floor(l.cases * rand(0.3, 0.85)) : l.cases;
+    l.dmg = Math.random() < 0.05 && l.delivered > 0 ? 1 : 0;
   }
-  const short = po.lines.some(l => l.delivered < l.qty || l.dmg);
-  note(S, po.bid, short ? 'warn' : 'info', `Delivery ${po.id} from ${sup.name} has arrived${short ? ' with discrepancies' : ''}. Review it in Deliveries.`);
+  const short = po.lines.some(l => l.delivered < l.cases || l.dmg);
+  note(S, po.bid, short ? 'warn' : 'info', `Delivery ${po.id} from ${sup.name} is at the back door${short ? ', with some boxes missing or damaged' : ''}. Check it in under Deliveries.`);
 }
 function deliveryIn(po) { return po.lines.reduce((a, l) => a + l.delivered - l.dmg, 0); }
 function acceptDelivery(S, poId, by) {
   const po = S.pos.find(p => p.id === poId); if (!po) return { ok: false, err: 'Order not found.' };
   if (po.status !== 'arrived') return { ok: false, err: 'This delivery has already been handled.' };
   const b = branchOf(S, po.bid); if (!b) return { ok: false, err: 'Branch not found.' };
-  const need = deliveryIn(po), free = stockCap(b) - stockUsed(b);
-  if (need > free) return { ok: false, err: `Not enough stockroom space: this delivery needs ${need} units and ${Math.max(0, free)} are free. Move stock to shelves or expand the stockroom.` };
-  const T = TYPES[b.type]; let credit = 0;
+  const need = deliveryIn(po);
+  const T = TYPES[b.type]; let credit = 0, shortCases = 0;
   for (const l of po.lines) {
-    const good = l.delivered - l.dmg; const it = b.items[l.sku];
-    if (good > 0) addBatch(S, it, T.pmap[it.pid], 0, good, l.unit);
-    credit += (l.qty - good) * l.unit;
+    const good = l.delivered - l.dmg; const it = b.items[l.sku]; const exp = expFor(S, T.pmap[it.pid]);
+    for (let i = 0; i < good; i++) addCase(S, b, l.sku, l.pack, l.unit, exp, 'dock');
+    credit += (l.cases - good) * l.pack * l.unit; shortCases += l.cases - good;
   }
   po.status = 'closed'; po.closedAt = S.t; po.credit = credit; po.acceptedBy = by || 'you';
   b.supRel[po.sup] = Math.min(100, (b.supRel[po.sup] || 0) + 3);
-  if (credit > 0) { cashTx(S, b.id, credit, 'Supplier credit', `${po.id}: ${po.lines.reduce((a, l) => a + l.qty - (l.delivered - l.dmg), 0)} units short or damaged`); st(S, dayOf(S.t), b.id).credits += credit; st(S, dayOf(S.t), b.id).purchases -= credit; }
-  return { ok: true, credit, units: need };
+  if (credit > 0) { cashTx(S, b.id, credit, 'Supplier credit', `${po.id}: ${shortCases} box${shortCases === 1 ? '' : 'es'} missing or damaged`); st(S, dayOf(S.t), b.id).credits += credit; st(S, dayOf(S.t), b.id).purchases -= credit; }
+  return { ok: true, credit, boxes: need };
 }
 function refuseDelivery(S, poId) {
   const po = S.pos.find(p => p.id === poId); if (!po || po.status !== 'arrived') return { ok: false, err: 'This delivery has already been handled.' };
@@ -805,25 +872,24 @@ function refuseDelivery(S, poId) {
   const s = st(S, dayOf(S.t), po.bid); s.credits += po.sub; s.purchases -= po.sub;
   return { ok: true };
 }
-function freeSpace(S, b) {
-  const inbound = S.pos.filter(p => p.bid === b.id && (p.status === 'transit' || p.status === 'arrived')).reduce((a, p) => a + p.lines.reduce((x, l) => x + l.qty, 0), 0);
-  return Math.max(0, stockCap(b) - stockUsed(b) - inbound);
-}
+// Free rack spaces once everything at the back door and on its way has been put away.
+function freeSpace(S, b) { return Math.max(0, freeSlots(b).length - atDock(b).length - casesInbound(S, b)); }
 function fitToSpace(lines, free) {
-  const tot = lines.reduce((a, l) => a + l.qty, 0);
+  const tot = lines.reduce((a, l) => a + l.cases, 0);
   if (tot <= free) return lines;
   const k = free / tot;
-  return lines.map(l => ({ sku: l.sku, qty: Math.floor(l.qty * k) })).filter(l => l.qty > 0);
+  return lines.map(l => ({ sku: l.sku, cases: Math.floor(l.cases * k) })).filter(l => l.cases > 0);
 }
+const casesFor = (b, it, units) => Math.max(1, Math.ceil(units / packOf(b, it)));
 function reorderSuggestion(S, b, supId, free) {
   const out = [];
   for (const it of supItems(b, supId)) {
     if (!b.listed[it.pid]) continue;
     const p = prodOf(b, it); if (b.type === 'book' && p.release > dayOf(S.t) + 2) continue;
-    const have = itShelf(it) + itStock(it) + onOrder(S, b, it.sku);
-    if (have < it.min) out.push({ sku: it.sku, qty: Math.max(it.reorder, it.min - have) });
+    const have = itShelf(it) + itStock(b, it) + onOrder(S, b, it.sku);
+    if (have < it.min) out.push({ sku: it.sku, cases: casesFor(b, it, Math.max(it.reorder, it.min - have)) });
   }
-  return fitToSpace(out, free == null ? freeSpace(S, b) : free);
+  return out;
 }
 function bestSupplierFor(b, it) {
   let best = null, bu = 1e18;
@@ -835,18 +901,18 @@ function managerReorder(S, b) {
   for (const it of Object.values(b.items)) {
     if (!b.listed[it.pid]) continue;
     const p = prodOf(b, it); if (b.type === 'book' && p.release > dayOf(S.t) + 2) continue;
-    const have = itShelf(it) + itStock(it) + onOrder(S, b, it.sku);
+    const have = itShelf(it) + itStock(b, it) + onOrder(S, b, it.sku);
     if (have >= it.min) continue;
     const sid = bestSupplierFor(b, it); if (!sid) continue;
-    (groups[sid] = groups[sid] || []).push({ sku: it.sku, qty: Math.max(it.reorder, it.min - have) });
+    (groups[sid] = groups[sid] || []).push({ sku: it.sku, cases: casesFor(b, it, Math.max(it.reorder, it.min - have)) });
   }
   let n = 0; let free = freeSpace(S, b);
   for (const [sid, raw] of Object.entries(groups)) {
-    const lines = fitToSpace(raw, free); if (!lines.length) { note(S, b.id, 'warn', `Store manager could not reorder: the stockroom at ${b.name} is full.`); break; }
+    const lines = fitToSpace(raw, free); if (!lines.length) { note(S, b.id, 'warn', `Store manager could not reorder: there is no free rack space at ${b.name}.`); break; }
     const q = quoteOrder(S, b, sid, lines);
-    if (q.sub < SUPPLIERS[sid].minOrder) { const k = Math.ceil(SUPPLIERS[sid].minOrder / Math.max(1, q.sub)); if (k > 3) continue; lines.forEach(l => l.qty *= k); }
+    if (q.sub < SUPPLIERS[sid].minOrder) { const k = Math.ceil(SUPPLIERS[sid].minOrder / Math.max(1, q.sub)); if (k > 3) continue; lines.forEach(l => l.cases *= k); }
     const r = placeOrder(S, b.id, sid, lines, 'manager');
-    if (r.ok) { n++; free -= lines.reduce((a, l) => a + l.qty, 0); note(S, b.id, 'info', `Store manager placed ${r.po.id} with ${SUPPLIERS[sid].name} (${money(r.po.total)}).`); }
+    if (r.ok) { n++; free -= lines.reduce((a, l) => a + l.cases, 0); note(S, b.id, 'info', `Store manager placed ${r.po.id} with ${SUPPLIERS[sid].name} (${money(r.po.total)}).`); }
     else note(S, b.id, 'warn', `Store manager could not reorder from ${SUPPLIERS[sid].name}: ${r.err}`);
   }
   return n;
@@ -863,7 +929,8 @@ function signSupplier(S, bid, supId) {
 function buyEquip(S, bid, eid) {
   const b = branchOf(S, bid), e = TYPES[b.type].equip.find(x => x.id === eid);
   if (!e) return { ok: false, err: 'Unknown equipment.' };
-  if ((b.equip[eid] || 0) >= e.max) return { ok: false, err: `This store already has the maximum of ${e.max}.` };
+  const mx = eid === 'storage' ? SIZES[b.size].racks : e.max;
+  if ((b.equip[eid] || 0) >= mx) return { ok: false, err: eid === 'storage' ? `The stockroom has no floor space for more racks (${mx} in a ${SIZES[b.size].label.toLowerCase()} store).` : `This store already has the maximum of ${e.max}.` };
   if (S.cash < e.cost) return { ok: false, err: `Not enough cash. ${e.name} costs ${money(e.cost)}.` };
   cashTx(S, bid, -e.cost, 'Equipment', `${e.name} for ${b.name}`); st(S, dayOf(S.t), bid).capex += e.cost; b.invested += e.cost;
   b.equip[eid] = (b.equip[eid] || 0) + 1; return { ok: true };
@@ -941,7 +1008,7 @@ function openingStockCost(S, b) {
   for (const it of Object.values(b.items)) if (b.listed[it.pid]) { const p = T.pmap[it.pid]; const q = openingQty(b, p); cost += q * costOf(b, it); units += q; }
   return { cost, units };
 }
-function openingQty(b, p) { const m = shelfMaxOf(b, p); return b.type === 'clothing' ? m : b.type === 'grocery' ? Math.round(m * 1.25) : Math.round(m * 1.5); }
+function openingQty(b, p) { return shelfMaxOf(b, p); }
 function openBranch(S, o) {
   if (!TYPES[o.type] || !LOCS[o.loc] || !SIZES[o.size]) return { ok: false, err: 'Pick a type, location and size.' };
   const name = String(o.name || '').trim().slice(0, 40); if (!name) return { ok: false, err: 'Give the store a name.' };
@@ -956,7 +1023,7 @@ function openBranch(S, o) {
   st(S, dayOf(S.t), b.id).capex += cost; b.invested = cost;
   if (o.stock) {
     const T = TYPES[b.type];
-    for (const it of Object.values(b.items)) if (b.listed[it.pid]) { const p = T.pmap[it.pid]; const q = openingQty(b, p); const sh = Math.min(q, shelfMaxOf(b, p)); addBatch(S, it, p, sh, q - sh, costOf(b, it)); }
+    for (const it of Object.values(b.items)) if (b.listed[it.pid]) { const p = T.pmap[it.pid]; shelfAdd(S, it, openingQty(b, p), costOf(b, it), expFor(S, p)); }
     cashTx(S, b.id, -stock.cost, 'Opening inventory', `${stock.units} units for ${name}`); st(S, dayOf(S.t), b.id).purchases += stock.cost;
   }
   if (o.cashier) { const a = b.apps.filter(x => x.role === 'cashier').sort((x, y) => x.wage - y.wage)[0]; if (a) hire(S, b.id, a.id); }
@@ -965,7 +1032,7 @@ function openBranch(S, o) {
   note(S, b.id, 'good', `${name} is open for business.`);
   return { ok: true, b };
 }
-function sellValue(S, b) { let inv = 0; for (const it of Object.values(b.items)) for (const x of it.batches) inv += (x.s + x.r) * x.c; return Math.round(b.invested * 0.5 + inv * 0.6); }
+function sellValue(S, b) { const inv = invValue(b); return Math.round(b.invested * 0.5 + inv * 0.6); }
 function sellBranch(S, bid) {
   if (S.branches.length <= 1) return { ok: false, err: 'You cannot sell your only store.' };
   const b = branchOf(S, bid); if (!b) return { ok: false, err: 'Not found.' };
@@ -995,10 +1062,12 @@ function dayStart(S) {
     // spoilage
     let lost = 0, units = 0;
     for (const it of Object.values(b.items)) {
-      for (const x of it.batches) if (x.exp != null && x.exp < day && x.s + x.r > 0) { lost += (x.s + x.r) * x.c; units += x.s + x.r; x.s = 0; x.r = 0; }
+      for (const x of it.batches) if (x.exp != null && x.exp < day && x.s > 0) { lost += x.s * x.c; units += x.s; x.s = 0; }
       cleanBatches(it); it.soldY = it.soldT; it.soldT = 0; it.missT = 0;
     }
-    if (units) { st(S, day - 1, b.id).spoil += lost; note(S, b.id, 'warn', `${units} expired units thrown out at ${b.name} (${money(lost)} at cost).`); }
+    if (units) { st(S, day - 1, b.id).spoil += lost; note(S, b.id, 'warn', `${units} expired units pulled off the shelves at ${b.name} (${money(lost)} at cost).`); }
+    const old = b.cases.filter(c => c.exp != null && c.exp < day).length;
+    if (old) note(S, b.id, 'warn', `${old} box${old === 1 ? ' has' : 'es have'} passed the use-by date in the ${b.name} stockroom. Throw ${old === 1 ? 'it' : 'them'} out to free the space.`);
     chargeDaily(S, b, day);
     for (const e of b.emps) { if (e.on) { e.days++; e.eff = Math.min(1.5, Math.round((e.eff + 0.004) * 1000) / 1000); } releaseTask(b, e); e.on = Math.random() < e.rel; if (!e.on) note(S, b.id, 'warn', `${e.name} (${ROLES[e.role].label.toLowerCase()}) called in sick today.`); }
     refreshApplicants(S, b);
@@ -1108,7 +1177,9 @@ function branchMinute(S, b, mod) {
         const m = fillAll(S, b, Math.round(35 * e.eff * boost)); e.task = m ? { label: `Restocked ${m} units` } : { label: 'Shelves are full' };
       } else if (e.role === 'receiver' && mod % 5 === 0) {
         const po = S.pos.find(p => p.bid === b.id && p.status === 'arrived' && S.t - p.arrivedAt >= Math.round(10 / e.eff));
-        if (po) { const r = acceptDelivery(S, po.id, e.name); e.task = { label: r.ok ? `Received ${po.id}` : 'Stockroom is full' }; if (!r.ok && !po.warned) { po.warned = true; note(S, b.id, 'warn', `${e.name} could not receive ${po.id}: ${r.err}`); } }
+        if (po) { const r = acceptDelivery(S, po.id, e.name); e.task = { label: r.ok ? `Checked in ${po.id}` : 'Could not check in' }; }
+        const d = atDock(b).length;
+        if (d) { const n = putAwayAll(S, b); e.task = { label: n ? `Unpacked ${n} box${n === 1 ? '' : 'es'}` : 'Stockroom is full' }; if (!n && !b._fullWarn) { b._fullWarn = S.t; note(S, b.id, 'warn', `${e.name} can't unpack: the stockroom at ${b.name} is full.`); } else if (n) b._fullWarn = 0; }
       } else if (e.role === 'cleaner' && mod % 15 === 0 && mod >= OPEN && mod < CLOSE) {
         b.clean = clamp(b.clean + 2.2 * e.eff * boost, 0, 100); e.task = { label: 'Cleaning the floor' };
       } else if (e.role === 'manager') e.task = { label: 'Supervising the store' };
@@ -1145,14 +1216,23 @@ function sumStats(S, d0, d1, bid) {
   out.net = out.gross - out.opex - out.spoil;
   return out;
 }
-function invValue(b) { let v = 0; for (const it of Object.values(b.items)) for (const x of it.batches) v += (x.s + x.r) * x.c; for (const c of Object.values(b.cust)) if (c.visit) for (const l of c.visit.basket) for (const pk of l.picks) v += pk.q * pk.c; return v; }
+function invValue(b) { let v = 0; for (const it of Object.values(b.items)) for (const x of it.batches) v += x.s * x.c; for (const c of b.cases) v += c.q * c.c; for (const c of Object.values(b.cust)) if (c.visit) for (const l of c.visit.basket) for (const pk of l.picks) v += pk.q * pk.c; return v; }
 function money(c) { const neg = c < 0; c = Math.abs(Math.round(c)); return (neg ? '−$' : '$') + Math.floor(c / 100).toLocaleString('en-US') + '.' + String(c % 100).padStart(2, '0'); }
 
 /* Check that inventory, baskets and orders are internally consistent. Used by tests and the admin screen. */
 function audit(S) {
   const issues = [];
   for (const b of S.branches) {
-    for (const it of Object.values(b.items)) for (const x of it.batches) if (x.s < 0 || x.r < 0 || !Number.isFinite(x.s) || !Number.isFinite(x.r)) issues.push(`${b.name}: negative stock on ${it.sku}`);
+    for (const it of Object.values(b.items)) for (const x of it.batches) if (x.s < 0 || !Number.isFinite(x.s)) issues.push(`${b.name}: negative stock on ${it.sku}`);
+    const seen = new Set(), slots = new Set(slotList(b));
+    for (const c of b.cases) {
+      if (!(c.q > 0) || !Number.isInteger(c.q)) issues.push(`${b.name}: box ${c.id} holds ${c.q} units`);
+      if (!b.items[c.sku]) issues.push(`${b.name}: box ${c.id} has an unknown product`);
+      if (c.loc[0] === 'S') { if (!slots.has(c.loc)) issues.push(`${b.name}: box on a rack that doesn't exist`); if (seen.has(c.loc)) issues.push(`${b.name}: two boxes in rack space ${c.loc}`); seen.add(c.loc); }
+      else if (c.loc !== 'dock' && c.loc !== 'hands') issues.push(`${b.name}: box ${c.id} is nowhere`);
+    }
+    if (inHands(b).length > handsCap(b)) issues.push(`${b.name}: carrying more boxes than possible`);
+    for (const [pid, on] of Object.entries(b.listed)) if (on && !(b.lorder || []).includes(pid)) issues.push(`${b.name}: shelf order missing ${pid}`);
     for (const cid of b.queue) { const c = b.cust[cid]; if (!c || !c.visit) issues.push(`${b.name}: queue holds a customer who is not visiting`); }
     for (const cid of b.queue) { const v = b.cust[cid] && b.cust[cid].visit; if (v && v.phase === 'register' && v.by !== 'you' && !b.emps.some(e => e.id === v.by && e.task && e.task.cid === cid)) issues.push(`${b.name}: customer stuck at a register nobody is running`); }
     if (new Set(b.queue).size !== b.queue.length) issues.push(`${b.name}: customer appears twice in queue`);
@@ -1165,7 +1245,7 @@ function audit(S) {
 }
 
 G.RE = { C, DAY, OPEN, CLOSE, SHUT, LAST_ENTRY, MON, DOW, LOCS, SIZES, TYPES, SUPPLIERS, ROLES, CAMPAIGNS, BRAND_CAMPAIGN, LOYALTY_COST, GOALS, FMT_LABEL,
-  dayOf, dateOf, fmtDate, fmtTime, newGame, step, skipNight, isNight, facings, facingsUsed, stockCap, stockUsed, itShelf, itStock, prodOf, shelfMaxOf, refPrice, costOf, avgCost, effPrice, saleOn,
+  dayOf, dateOf, fmtDate, fmtTime, newGame, step, skipNight, isNight, facings, facingsUsed, stockCap, stockUsed, itShelf, itStock, SLOTS, handsCap, inHands, atDock, packOf, slotList, freeSlots, caseExpired, caseOf, takeCase, putCase, stockCase, discardCase, combineCases, putAwayAll, openStore, casesInbound, prodOf, shelfMaxOf, refPrice, costOf, avgCost, effPrice, saleOn,
   arrivalRate, seasonMult, typeLabel, custType, basketTotal, completeSale, payMethod, serveStart, serveCancel, itemName, toShelf, fillAll, setListed,
   supUnit, supItems, freeSpace, supCarries, supDiscount, onOrder, quoteOrder, placeOrder, acceptDelivery, refuseDelivery, deliveryIn, reorderSuggestion, signSupplier,
   buyEquip, buyUpgrade, hire, fire, runCampaign, tidy, openCost, rentOf, utilOf, maintOf, openBranch, openingStockCost, starterStock, sellBranch, sellValue, setStatus,

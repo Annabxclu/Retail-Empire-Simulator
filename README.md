@@ -6,10 +6,20 @@ This is the **first playable prototype**: a single self-contained web page with 
 
 ## Playing
 
-- **Career mode** starts you with $6,000 and a list of goals. **Sandbox mode** lets you pick your starting cash and try every store type right away.
+Your first grocery store starts **empty and closed** at 5 a.m. on day 1. The overview screen walks you through opening:
+
+1. **Choose products and order them by the box** from a supplier. Each product comes in boxes of a fixed size, such as 12 loaves or 6 gallons of milk.
+2. **Wait for the delivery truck**, or skip ahead until it arrives.
+3. **Check the delivery in.** Missing or damaged boxes are credited back, and the good boxes are left at the back door.
+4. **Unpack the boxes onto stockroom racks.** Each rack holds six boxes. Buy more racks as your range grows, or throw out boxes you don't need.
+5. **Carry boxes out to the store floor**, two at a time or four with a stock trolley, and fill the shelves. Putting a new product in an empty space starts selling it.
+6. **Open the doors.** As customers buy, the shelves visibly empty, so keep fetching boxes and refilling. Serve customers at the register yourself until you hire a cashier.
+
+Staff take jobs off your hands as you grow. Stockers keep the shelves filled, delivery receivers check in and unpack deliveries, cashiers run the registers, and a store manager reorders stock.
+
+- **Career mode** starts you with $6,000 and a list of goals. **Sandbox mode** lets you pick your starting cash.
 - At 1× speed, one real second is one game minute. Use pause, 1×, 2× and 4× in the top bar. The space bar also pauses and resumes.
-- The game saves to your browser every 10 seconds and whenever you leave the tab. While you're away, the clock stops.
-- Only one tab can run the game at a time.
+- The game saves to your browser every 10 seconds and whenever you leave the tab. While you're away, the clock stops. Only one tab can run the game at a time.
 - **Settings & save** can copy a save code, so you can back up your game or move it to another browser.
 
 ## What's in the prototype
@@ -17,9 +27,11 @@ This is the **first playable prototype**: a single self-contained web page with 
 - **Headquarters:** company cash, today's revenue, expenses and profit, a performance table for every store, alerts, and expansion opportunities.
 - **Checkout:** customers form a line with their own baskets and stay in it until they're served, even after closing time. Each customer decides whether to pay by card or cash; for cash you enter what you were handed and the change is worked out. Cashiers you hire take over the registers.
 - **Customers:** each one has a type, a budget, tastes, price tolerance, loyalty, satisfaction and purchase history.
-- **Suppliers and orders:** compare suppliers, sign contracts, and place purchase orders, either your own quantities or suggested ones. Orders are paid when placed and arrive hours later.
-- **Deliveries:** a delivery must be checked in before it becomes stock. Shortages and damaged units are credited back. You can also refuse a delivery.
-- **Inventory:** shelf and stockroom quantities, reorder points, low-stock and empty-shelf filters, and moving stock to the shelves.
+- **Store floor:** every shelf space, showing how full it is, the price, how many boxes are in back, and how many customers wanted it today and found it empty. Fetch boxes and stock shelves from here.
+- **Stockroom:** the back door and racks. Unpack boxes, move them between rack spaces, carry them, combine part-full boxes, and throw out expired ones.
+- **Suppliers and orders:** compare suppliers, sign contracts, and order by the box. Orders are paid when placed and arrive hours later.
+- **Deliveries:** check in each delivery. Missing and damaged boxes are credited back. You can also refuse a delivery.
+- **Inventory list:** one table with shelf stock, stock still in boxes, what's on order, reorder points, and missed sales.
 - **Products and pricing:** decide what goes in your limited display space, and set prices. Customers compare your price with the suggested price.
 - **Employees:** cashiers, stockers, delivery receivers, cleaners and store managers. A manager reorders stock below its minimum every morning.
 - **Equipment and upgrades:** shelving, refrigeration, freezers, registers, fitting rooms, gift wrap stations, reading nooks, stockroom expansions, and new grocery departments.
@@ -31,7 +43,7 @@ This is the **first playable prototype**: a single self-contained web page with 
 
 | | Grocery | Clothing | Toy | Book |
 |---|---|---|---|---|
-| Stock is tracked per | product, with use-by dates | size × color | product | format (hardcover / paperback) |
+| Stock is tracked per | product, with use-by dates on every box | size × color | product | format (hardcover / paperback) |
 | Special rules | spoilage, fridge and freezer space, departments to unlock | fitting rooms, markdowns, returns, seasonal collections | age ranges, trending toys, December peak, gift wrap | genre loyalty, new releases, preorders, bestsellers |
 
 ## Project layout
@@ -54,14 +66,15 @@ Make your changes in `src/`, then run `python3 build.py` to rebuild `index.html`
 node tests/sim.js 14      # one grocery store, played by a simple bot for 14 days
 node tests/multi.js       # all four store types for 30 days
 node tests/queue.js       # customers never leave the checkout line
-node tests/ui.js          # browser test of every screen (requires Playwright)
+node tests/opening.js     # the empty-store opening: order, check in, unpack, carry, open
+node tests/ui.js          # clicks through a whole new game in a browser (requires Playwright)
 ```
 
-The simulation tests check the game's integrity after every game minute: no negative stock, no duplicate customers in a queue, no more products on display than there is space for, and no duplicate order numbers. If a check fails, the test stops and reports it.
+The simulation tests check the game's integrity after every game minute: no negative stock, no duplicate customers in a queue, no more products on display than there is space for, no two boxes in the same rack space, never carrying more boxes than you can, and no duplicate order numbers. If a check fails, the test stops and reports it.
 
 ## Known limitations
 
-- Saves live only in one browser's storage. Use the save code as a backup.
+- Saves live only in one browser's storage. Use the save code as a backup. Saves from before the stockroom update can't be loaded.
 - All stores spend from one company account, though every store gets its own income statement.
 - The ledger keeps the latest 2,500 transactions; daily totals are kept for the whole game.
 - Not built yet: online orders, delivery and pickup, regional managers, multiple cities, book events, research upgrades, and moving stock between stores.
