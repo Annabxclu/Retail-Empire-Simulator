@@ -160,8 +160,8 @@ const EQ = (id, name, cost, desc, o = {}) => ({ id, name, cost:C(cost), desc, fa
 const TYPES = {
   grocery: {
     id:'grocery', label:'Grocery store', short:'Grocery', traffic:4.2, openCost:C(25000), rent:C(130), util:C(22),
-    desc:'Fresh food and everyday essentials. Lots of customers, thin margins, and stock that expires.',
-    specials:['Fresh food expires and spoils overnight','Refrigerated and freezer cases limit what you can sell cold','Departments to unlock: meat counter, frozen, household','Fast-moving stock needs frequent reorders'],
+    desc:'Fresh food and everyday essentials. Lots of customers, thin margins, and stock that sells fast.',
+    specials:['Fast-moving stock: shelves empty quickly','Refrigerated and freezer cases limit what you can sell cold','Departments to unlock: meat counter, frozen, household','Fast-moving stock needs frequent reorders'],
     catalog:GROCERY, facings:{ ambient:'Shelf facings', fridge:'Refrigerated facings', freezer:'Freezer facings' },
     shelfMax:{ ambient:20, fridge:14, freezer:14 }, defMin:6, defReorder:12,
     facingOf:p => p.cold || 'ambient',
@@ -391,8 +391,10 @@ function packOf(b, it) { return TYPES[b.type].pmap[it.pid].pack || 1; }
 const slotId = (r, k) => `S${r}-${k}`;
 function slotList(b) { const out = []; for (let r = 0; r < (b.equip.storage || 0); r++) for (let k = 0; k < SLOTS; k++) out.push(slotId(r, k)); return out; }
 function freeSlots(b) { const used = new Set(b.cases.map(c => c.loc)); return slotList(b).filter(x => !used.has(x)); }
-const caseExpired = (S, c) => c.exp != null && c.exp < dayOf(S.t);
-function expFor(S, p) { const day = dayOf(S.t); return p.life ? day + p.life - 1 + (p.life > 5 ? randi(-1, 1) : 0) : null; }
+// Products never spoil. (Kept as functions so older saves and callers keep working.)
+const caseExpired = () => false;
+function expFor() { return null; }
+function noSpoil(S) { for (const b of S.branches || []) { for (const c of b.cases || []) c.exp = null; for (const it of Object.values(b.items || {})) for (const x of it.batches) x.exp = null; } return S; }
 function addCase(S, b, sku, q, cost, exp, loc) { const c = { id: S.seq.id++, sku, q, c: cost, exp: exp == null ? null : exp, loc: loc || 'dock' }; b.cases.push(c); return c; }
 function shelfAdd(S, it, q, cost, exp) { it.batches.push({ id: S.seq.id++, s: q, c: cost, exp: exp == null ? null : exp }); sortBatches(it); }
 function caseOf(b, id) { return b.cases.find(c => c.id === +id); }
@@ -1059,15 +1061,7 @@ function chargeDaily(S, b, day) {
 function dayStart(S) {
   const day = dayOf(S.t);
   for (const b of S.branches) {
-    // spoilage
-    let lost = 0, units = 0;
-    for (const it of Object.values(b.items)) {
-      for (const x of it.batches) if (x.exp != null && x.exp < day && x.s > 0) { lost += x.s * x.c; units += x.s; x.s = 0; }
-      cleanBatches(it); it.soldY = it.soldT; it.soldT = 0; it.missT = 0;
-    }
-    if (units) { st(S, day - 1, b.id).spoil += lost; note(S, b.id, 'warn', `${units} expired units pulled off the shelves at ${b.name} (${money(lost)} at cost).`); }
-    const old = b.cases.filter(c => c.exp != null && c.exp < day).length;
-    if (old) note(S, b.id, 'warn', `${old} box${old === 1 ? ' has' : 'es have'} passed the use-by date in the ${b.name} stockroom. Throw ${old === 1 ? 'it' : 'them'} out to free the space.`);
+    for (const it of Object.values(b.items)) { cleanBatches(it); it.soldY = it.soldT; it.soldT = 0; it.missT = 0; }
     chargeDaily(S, b, day);
     for (const e of b.emps) { if (e.on) { e.days++; e.eff = Math.min(1.5, Math.round((e.eff + 0.004) * 1000) / 1000); } releaseTask(b, e); e.on = Math.random() < e.rel; if (!e.on) note(S, b.id, 'warn', `${e.name} (${ROLES[e.role].label.toLowerCase()}) called in sick today.`); }
     refreshApplicants(S, b);
@@ -1245,7 +1239,7 @@ function audit(S) {
 }
 
 G.RE = { C, DAY, OPEN, CLOSE, SHUT, LAST_ENTRY, MON, DOW, LOCS, SIZES, TYPES, SUPPLIERS, ROLES, CAMPAIGNS, BRAND_CAMPAIGN, LOYALTY_COST, GOALS, FMT_LABEL,
-  dayOf, dateOf, fmtDate, fmtTime, newGame, step, skipNight, isNight, facings, facingsUsed, stockCap, stockUsed, itShelf, itStock, SLOTS, handsCap, inHands, atDock, packOf, slotList, freeSlots, caseExpired, caseOf, takeCase, putCase, stockCase, discardCase, combineCases, putAwayAll, openStore, casesInbound, prodOf, shelfMaxOf, refPrice, costOf, avgCost, effPrice, saleOn,
+  noSpoil, dayOf, dateOf, fmtDate, fmtTime, newGame, step, skipNight, isNight, facings, facingsUsed, stockCap, stockUsed, itShelf, itStock, SLOTS, handsCap, inHands, atDock, packOf, slotList, freeSlots, caseExpired, caseOf, takeCase, putCase, stockCase, discardCase, combineCases, putAwayAll, openStore, casesInbound, prodOf, shelfMaxOf, refPrice, costOf, avgCost, effPrice, saleOn,
   arrivalRate, seasonMult, typeLabel, custType, basketTotal, completeSale, payMethod, serveStart, serveCancel, itemName, toShelf, fillAll, setListed,
   supUnit, supItems, freeSpace, supCarries, supDiscount, onOrder, quoteOrder, placeOrder, acceptDelivery, refuseDelivery, deliveryIn, reorderSuggestion, signSupplier,
   buyEquip, buyUpgrade, hire, fire, runCampaign, tidy, openCost, rentOf, utilOf, maintOf, openBranch, openingStockCost, starterStock, sellBranch, sellValue, setStatus,

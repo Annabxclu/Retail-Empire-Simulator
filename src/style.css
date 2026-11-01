@@ -170,7 +170,7 @@ td .nm{font-weight:600} td .sb{font-size:12px;color:var(--muted)}
   .shell{grid-template-columns:1fr}
   #menuBtn{display:inline-flex}
   nav.side{position:fixed;top:0;left:0;bottom:0;width:270px;height:100%;z-index:40;transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 40px rgba(0,0,0,.3)}
-  nav.side.open{transform:none}
+  nav.side.open{transform:none;box-shadow:0 0 0 100vmax rgba(10,16,24,.45)}
   main{padding:16px 16px 80px}
   .top{gap:6px 8px;padding:8px 12px}
   .brand{order:1;flex:1 1 0;min-width:70px} .brand span{display:none}
@@ -227,3 +227,41 @@ td .nm{font-weight:600} td .sb{font-size:12px;color:var(--muted)}
 .checklist .li.cur{font-weight:600}
 @media (max-width:860px){.slots{grid-template-columns:repeat(3,minmax(0,1fr));background:none}.rack{grid-template-columns:1fr}.aisle{grid-template-columns:repeat(2,minmax(0,1fr))}.selbar{top:100px}}
 @media (max-width:860px){.dock{grid-template-columns:repeat(2,minmax(0,1fr))}#toasts .toast:nth-last-child(n+3){display:none}}
+
+/* ---------- phone first ---------- */
+.tabbar{display:none}
+.olist{display:flex;flex-direction:column;gap:8px}
+.ogrp{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.orow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.orow+.orow{border-top:1px solid var(--line);padding-top:6px}
+.oinfo{min-width:0;flex:1}
+.oinfo .nm{font-weight:600}
+.qsel{min-width:112px;padding:9px 10px;font-size:15px;font-weight:500;border-radius:8px;background:var(--panel2);flex:none}
+.qsel.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.ofilters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.osum{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+.osum b{font-size:18px}
+@media (max-width:860px){
+  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .top{padding-top:calc(8px + env(safe-area-inset-top))}
+  #menuBtn{display:none}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:35;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+  .tabbar button{position:relative;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px 7px;font-size:11px;font-weight:500;color:var(--muted);cursor:pointer;min-height:56px}
+  .tabbar button svg{width:22px;height:22px}
+  .tabbar button[aria-current="page"]{color:var(--accent);font-weight:700}
+  .tabbar .tb{position:absolute;top:4px;left:calc(50% + 6px);background:var(--bad);color:#fff;font-style:normal;font-size:10px;font-weight:700;border-radius:999px;padding:0 5px;font-family:var(--mono)}
+  #toasts{bottom:calc(72px + env(safe-area-inset-bottom))}
+  main{padding-bottom:24px}
+  .btn{min-height:40px} .btn.sm{min-height:36px;padding:6px 11px;font-size:13px} .seg button{min-height:38px}
+  .ph{margin-bottom:12px} .ph p{font-size:13px}
+  .dlg{display:flex;flex-direction:column;height:100%;min-height:100%}
+  .dlg .bd{flex:1;overflow:auto;max-height:none;-webkit-overflow-scrolling:touch}
+  .dlg footer{position:sticky;bottom:0;background:var(--panel);padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+  .dlg header{padding-top:calc(14px + env(safe-area-inset-top))}
+  #modal.on{height:100%}
+  .hbox{flex-direction:column;align-items:stretch} .hbox .row{justify-content:stretch} .hbox .row .btn{flex:1}
+  .facing{min-height:0}
+  .qsel{min-width:104px}
+  .osum{flex-basis:100%}
+  .dlg footer>.row{width:100%} .dlg footer>.row .btn{flex:1}
+}
