@@ -1,10 +1,10 @@
 // Customers must never give up on the checkout line, and cashiers must clear it even after closing.
 require(require('path').join(__dirname, '..', 'src', 'engine.js'));
-const R = globalThis.RE; let fail = 0;
+const R = globalThis.RE; let fail = 0; const { stockAndOpen } = require('./helpers');
 const check = (ok, msg) => { console.log((ok ? 'PASS ' : 'FAIL ') + msg); if (!ok) fail = 1; };
 
 // 1. Nobody serves for a whole day: everyone who reached the line is still in it.
-let S = R.newGame({}), b = S.branches[0];
+let S = R.newGame({ cash: R.C(20000) }), b = S.branches[0]; stockAndOpen(R, S, b);
 const reached = new Set();
 for (let i = 0; i < 1440; i++) {
   R.step(S);
@@ -22,7 +22,7 @@ for (const id of [...b.queue]) { R.serveStart(S, b.id, id); const c = b.cust[id]
 check(ok === stillThere.length && b.queue.length === 0, `served all ${ok} waiting customers; line now empty`);
 
 // 3. A cashier keeps working past closing until the line is empty.
-S = R.newGame({ cash: R.C(50000) }); b = S.branches[0];
+S = R.newGame({ cash: R.C(50000) }); b = S.branches[0]; stockAndOpen(R, S, b);
 const cashier = b.apps.find(a => a.role === 'cashier'); R.hire(S, b.id, cashier.id);
 const emp = b.emps[0]; emp.rel = 1; emp.eff = 0.4; // slow cashier so a line builds
 for (let i = 0; i < 1440 * 3; i++) { R.step(S); emp.on = true; const iss = R.audit(S); if (iss.length) { check(false, iss.join('; ')); break; } }

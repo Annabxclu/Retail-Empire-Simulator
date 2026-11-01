@@ -188,3 +188,42 @@ td .nm{font-weight:600} td .sb{font-size:12px;color:var(--muted)}
 }
 @media (min-width:861px){.speedwrap{display:flex;gap:8px;align-items:center}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* store floor */
+.hands{background:var(--panel);border:2px dashed var(--line);border-radius:var(--r);padding:10px 14px;display:flex;flex-direction:column;gap:8px}
+.hlist{display:flex;flex-direction:column;gap:6px}
+.hbox{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);border-left:4px solid #b88a4a}
+.hbox.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.aisle{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.facing{display:flex;flex-direction:column;gap:5px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);min-height:150px}
+.facing .nm{font-weight:600;font-size:13px;line-height:1.25}
+.facing.low{border-color:color-mix(in srgb,var(--warn) 55%,var(--line))}
+.facing.empty{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 6%,var(--panel2))}
+.facing.open{border-style:dashed;background:transparent;justify-content:center;align-items:flex-start}
+.facing .btn{margin-top:auto}
+.fill{height:34px;border-radius:4px;background:repeating-linear-gradient(90deg,var(--panel) 0 10px,var(--line) 10px 11px);border:1px solid var(--line);position:relative;overflow:hidden}
+.fill>i{position:absolute;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--accent) 70%,transparent)}
+.facing.low .fill>i{background:var(--warn)}
+.vgrid{display:flex;flex-wrap:wrap;gap:3px}
+.vgrid .v{font-size:10px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:var(--panel);border:1px solid var(--line)}
+.vgrid .v.out{color:var(--bad);border-color:var(--bad)}
+/* stockroom */
+.dock{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.dbox{display:flex;flex-direction:column;gap:4px}
+.racks{display:flex;flex-direction:column;gap:10px}
+.rack{display:grid;grid-template-columns:56px 1fr;gap:8px;align-items:center}
+.slots{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;padding:6px;border-radius:6px;background:repeating-linear-gradient(0deg,transparent 0 46px,var(--line) 46px 48px);border:1px solid var(--line)}
+.box,.slot{min-height:64px;border-radius:5px;padding:6px;text-align:left;cursor:pointer;font:inherit;color:inherit;display:flex;flex-direction:column;justify-content:space-between;gap:2px;min-width:0}
+.box{background:color-mix(in srgb,#c79a5b 22%,var(--panel));border:1px solid color-mix(in srgb,#a77a3b 55%,var(--line))}
+.box .bn{font-size:11px;font-weight:600;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.box.sel{outline:3px solid var(--accent);outline-offset:1px}
+.box.exp{background:color-mix(in srgb,var(--bad) 14%,var(--panel));border-color:var(--bad)}
+.slot{background:transparent;border:1px dashed var(--line);color:var(--muted);font-size:11px;align-items:center;justify-content:center}
+.slot.target{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.selbar{position:sticky;top:64px;z-index:5;margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-radius:8px;background:var(--ink);color:var(--panel)}
+.selbar .muted,.selbar .small{color:color-mix(in srgb,var(--panel) 75%,transparent)}
+.selbar .btn:not(.pri){background:transparent;color:var(--panel);border-color:color-mix(in srgb,var(--panel) 40%,transparent)}
+.checklist{margin-bottom:16px;border-left:4px solid var(--accent)}
+.checklist .li.cur{font-weight:600}
+@media (max-width:860px){.slots{grid-template-columns:repeat(3,minmax(0,1fr));background:none}.rack{grid-template-columns:1fr}.aisle{grid-template-columns:repeat(2,minmax(0,1fr))}.selbar{top:100px}}
+@media (max-width:860px){.dock{grid-template-columns:repeat(2,minmax(0,1fr))}#toasts .toast:nth-last-child(n+3){display:none}}
