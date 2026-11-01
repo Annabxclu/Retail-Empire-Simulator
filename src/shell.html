@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retail Empire Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/*CSS*/
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <button class="iconbtn" id="menuBtn" data-a="menu" aria-label="Open menu"></button>
+    <div class="brand"><b id="brandName">Retail Empire Simulator</b><span id="brandSub"></span></div>
+    <div class="tools"><button class="iconbtn qbtn" id="qBtn" data-a="queue">Queue</button><button class="iconbtn" id="bellBtn" data-a="bell" aria-label="Notifications"><span class="dot" id="bellDot" style="display:none">0</span></button></div>
+    <div class="clock"><span class="t" id="clkT">07:30</span><span class="d" id="clkD"></span></div>
+    <div class="speedwrap"><span id="clkS"></span><button class="btn sm" id="skipBtn" data-a="skip" style="display:none">Skip to morning</button>
+      <div class="speed" role="group" aria-label="Game speed"><button data-a="speed" data-n="0" aria-label="Pause">❚❚</button><button data-a="speed" data-n="1">1×</button><button data-a="speed" data-n="2">2×</button><button data-a="speed" data-n="4">4×</button></div></div>
+    <div class="cashbox" id="cash" title="Company cash">$0.00</div>
+  </header>
+  <div class="shell"><nav class="side" id="side" aria-label="Screens"></nav><main id="main"></main></div>
+</div>
+<div id="modal"></div>
+<div id="toasts" aria-live="polite"></div>
+<script>
+/*ENGINE*/
+</script>
+<script>
+/*UI*/
+</script>
+</body>
+</html>
